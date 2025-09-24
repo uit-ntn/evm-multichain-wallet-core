@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.local
+.env.production
+.env.staging
+*.log
+coverage/
+.nyc_output/
+dist/
+build/
+.DS_Store
+*.tgz
+*.tar.gz
