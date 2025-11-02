@@ -1,0 +1,28 @@
+{
+  "watch": [
+    "server/"
+  ],
+  "ext": "js,json",
+  "ignore": [
+    "node_modules/",
+    "artifacts/",
+    "cache/",
+    "test/",
+    "*.test.js",
+    "*.spec.js",
+    ".git/",
+    "logs/"
+  ],
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "delay": 1000,
+  "verbose": true,
+  "restartable": "rs",
+  "colours": true,
+  "events": {
+    "start": "echo '🚀 Server starting...'",
+    "restart": "echo '🔄 Server restarting due to changes...'",
+    "crash": "echo '💥 Server crashed - waiting for file changes before restart'"
+  }
+}

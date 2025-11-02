@@ -2,10 +2,10 @@
   "name": "evm-multichain-wallet-core",
   "version": "1.0.0",
   "description": "Multi-chain wallet API for EVM and Sui networks",
-  "main": "backend/app.js",
+  "main": "server/app.js",
   "scripts": {
-    "start": "node backend/app.js",
-    "dev": "nodemon backend/app.js",
+    "start": "node server/app.js",
+    "dev": "nodemon server/app.js",
     "test": "jest",
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.js",
@@ -28,9 +28,10 @@
     "dotenv": "^16.6.1",
     "ethers": "^6.7.1",
     "express": "^4.18.2",
-    "express-rate-limit": "^6.10.0",
+    "express-rate-limit": "^6.11.2",
     "helmet": "^7.0.0",
-    "mongoose": "^8.19.2"
+    "mongoose": "^8.19.2",
+    "morgan": "^1.10.1"
   },
   "devDependencies": {
     "jest": "^29.6.4",

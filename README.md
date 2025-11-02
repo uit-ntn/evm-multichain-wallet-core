@@ -38,7 +38,7 @@ Repository này tích hợp **Smart Contracts** và **Backend API** để đồn
   LimitOrder.test.js      # Unit tests cho LimitOrder
   StakingRewards.test.js  # Tests cho staking
 
-/Server/                  # 🔹 Node.js API Server
+/server/                  # 🔹 Node.js API Server
   /config/                # Cấu hình app, DB, chains, logger
     chains.js             # Registry chains & contract addresses
     env.js                # Environment loader/validator

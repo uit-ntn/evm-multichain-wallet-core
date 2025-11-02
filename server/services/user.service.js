@@ -1,18 +1,21 @@
-const User = require('../model/user.model');
+/**
+ * User Service
+ * Business logic cho user management
+ */
 
-class UserService {
-  /**
-   * Get all users
-   * @returns {Promise<Array>} Array of users
-   */
-  async getAllUsers() {
-    try {
-      const users = await User.find({}).select('-password'); // Exclude password field
-      return users;
-    } catch (error) {
-      throw error;
-    }
+const User = require('../models/user.model');
+const { logger } = require('../adapters/logger.adapter');
+
+const getAllUsers = async () => {
+  try {
+    const users = await User.find({}).select('-password');
+    return users;
+  } catch (error) {
+    logger.error('Error getting all users', { error: error.message });
+    throw error;
   }
-}
+};
 
-module.exports = new UserService();
+module.exports = {
+  getAllUsers,
+};

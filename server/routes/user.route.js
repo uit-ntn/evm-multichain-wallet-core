@@ -1,8 +1,13 @@
+/**
+ * User Routes
+ * Định nghĩa các routes cho users
+ */
+
 const express = require('express');
 const router = express.Router();
-const userController = require('../controller/user.controller');
+const userController = require('../controllers/userController');
 
-// Get all users
-router.get('/', userController.getAllUsers.bind(userController));
+// GET /api/users - Get all users
+router.get('/', userController.getAllUsers);
 
 module.exports = router;
