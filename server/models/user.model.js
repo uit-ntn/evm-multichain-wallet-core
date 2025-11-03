@@ -13,7 +13,6 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     validate: {
       validator: function(v) {
-        // Validate Ethereum address format (0x + 40 hex chars)
         return /^0x[a-fA-F0-9]{40}$/.test(v);
       },
       message: 'Invalid Ethereum address format'
@@ -47,13 +46,15 @@ const userSchema = new mongoose.Schema({
     default: 'Bronze'
   }
 }, {
-  timestamps: true, // Tự động tạo createdAt và updatedAt
+  timestamps: true, 
   collection: 'users'
 });
 
 // Indexes
 userSchema.index({ address: 1 }, { unique: true });
 userSchema.index({ role: 1 });
+// Add unique sparse index for displayName to prevent global collisions but allow empty values
+userSchema.index({ displayName: 1 }, { unique: true, sparse: true });
 
 // Methods
 userSchema.methods.toJSON = function() {
