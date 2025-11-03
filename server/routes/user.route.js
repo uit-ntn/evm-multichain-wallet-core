@@ -18,4 +18,7 @@ if (userController && typeof userController.upsertUser === 'function') {
   router.post('/', (req, res) => res.status(501).json({ message: 'Upsert handler not implemented' }));
 }
 
+// Liệt kê user (chỉ admin)
+router.get('/', userController.getAllUsers);
+
 module.exports = router;

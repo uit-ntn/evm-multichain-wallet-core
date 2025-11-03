@@ -6,12 +6,43 @@
 const User = require('../models/user.model');
 const { logger } = require('../adapters/logger.adapter');
 
-const getAllUsers = async () => {
+// const getAllUsers = async () => {
+//   try {
+//     const users = await User.find({}).select('-password');
+//     return users;
+//   } catch (error) {
+//     logger.error('Error getting all users', { error: error.message });
+//     throw error;
+//   }
+// };
+/**
+ * Lấy danh sách user (chỉ admin)
+ * @param {Object} params
+ * @param {number} params.page
+ * @param {number} params.pageSize
+ * @param {string} [params.role]
+ */
+const getAllUsers = async ({ page, pageSize, role }) => {
   try {
-    const users = await User.find({}).select('-password');
-    return users;
+    const filter = {};
+    if (role) filter.role = role;
+
+    const total = await User.countDocuments(filter);
+
+    const items = await User.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .select('address displayName role createdAt'); // tránh trả về nonce, stakedAmount
+
+    return {
+      items,
+      page,
+      pageSize,
+      total,
+    };
   } catch (error) {
-    logger.error('Error getting all users', { error: error.message });
+    logger.error('Error fetching user list', { error: error.message });
     throw error;
   }
 };

@@ -8,46 +8,58 @@ const userService = require('../services/user.service');
 const { logger } = require('../adapters/logger.adapter');
 const { jwt: jwtConfig } = require('../config');
 
+/**
+ * GET /api/users
+ * [R] Liệt kê user (admin, có phân trang + filter)
+ */
 const getAllUsers = async (req, res) => {
   try {
-    // 401 Unauthorized – thiếu JWT
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    // 🧩 1. Kiểm tra JWT từ header
+    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: Missing token' });
     }
 
-    // 403 Forbidden – không phải admin
-    if (!req.user.isAdmin) {
+    const token = authHeader.split(' ')[1];
+    let payload;
+    try {
+      payload = jwt.verify(token, jwtConfig.secret);
+    } catch (err) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    }
+
+    // 🧩 2. Chỉ admin được phép
+    if (payload.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Admin access required' });
     }
 
-    // Phân trang (pagination)
-    let { page = 1, limit = 20 } = req.query;
+    // 🧩 3. Lấy query params
+    let { page = 1, pageSize = 20, role } = req.query;
     page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
+    pageSize = parseInt(pageSize, 10);
 
-    // 400 Bad Request – tham số phân trang sai
+    // 🧩 4. Validate tham số phân trang
     if (
-      isNaN(page) || isNaN(limit) ||
-      page < 1 || limit < 1 ||
-      !Number.isInteger(page) || !Number.isInteger(limit) ||
-      limit > 100
+      isNaN(page) || isNaN(pageSize) ||
+      page < 1 || pageSize < 1 ||
+      !Number.isInteger(page) || !Number.isInteger(pageSize) ||
+      pageSize > 100
     ) {
       return res.status(400).json({ error: 'Bad Request: Invalid pagination parameters' });
     }
 
-    // 429 Too Many Requests – Giả lập, trong thực tế sẽ dùng middleware rate limit, ở đây demo:
+    // 🧩 5. Rate limit (demo)
     if (req.tooManyRequests) {
       return res.status(429).json({ error: 'Too Many Requests: Rate limit exceeded' });
     }
 
-    // Lấy dữ liệu người dùng với phân trang
-    const users = await userService.getAllUsers({ page, limit }); // cần sửa service nếu chưa có hỗ trợ phân trang
+    // 🧩 6. Gọi service để lấy danh sách user
+    const result = await userService.getAllUsers({ page, pageSize, role });
 
-    // 200 OK – Trả danh sách
-    return res.status(200).json(users);
+    // 🧩 7. Trả danh sách user
+    return res.status(200).json(result);
   } catch (error) {
     logger.error('Error getting all users', { error: error.message });
-    // 500 Internal Server Error
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -135,8 +147,8 @@ const upsertUser = async (req, res) => {
       return res.status(409).json({ error: 'Conflict: duplicate key' });
     }
     console.error("🔥 Error upserting user:", error);
-logger.error('Error upserting user', { error });
-return res.status(500).json({ error: error.message || 'Internal server error' });
+    logger.error('Error upserting user', { error });
+    return res.status(500).json({ error: error.message || 'Internal server error' });
 
   }
 };
