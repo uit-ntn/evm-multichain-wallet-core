@@ -133,136 +133,431 @@ POLYGONSCAN_API_KEY=XXXXXXXXXXXXXX
 
 ## 📋 Hướng Dẫn Lấy Environment Variables
 
-### 🗄️ **1. MongoDB URI**
+### 🌍 **1. Environment Config**
+
+#### `NODE_ENV`
 ```bash
-MONGO_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/evm-multichain-wallet
+NODE_ENV=development  # hoặc production
+```
+**Giá trị**: `development` (cho dev) hoặc `production` (cho production)
+
+#### `PORT`
+```bash
+PORT=4000
+```
+**Giá trị**: Port cho backend server (mặc định: 4000)
+
+---
+
+### 🗄️ **2. MongoDB (Database)**
+
+#### `MONGODB_URI`
+```bash
+MONGODB_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/database_name?retryWrites=true&w=majority
 ```
 
-**Cách lấy:**
-1. **Đăng ký MongoDB Atlas**: [https://www.mongodb.com/atlas](https://www.mongodb.com/atlas)
-2. **Tạo cluster mới** (chọn FREE tier)
-3. **Tạo database user**: Database Access → Add New Database User
-4. **Whitelist IP**: Network Access → Add IP Address (0.0.0.0/0 cho development)
-5. **Lấy connection string**: Clusters → Connect → Connect your application → Copy connection string
-6. **Thay thế**: `<username>`, `<password>`, `<cluster-url>`
+**Cách lấy MongoDB URI từ MongoDB Atlas:**
 
-### 🌐 **2. RPC Endpoints**
+1. **Đăng ký tài khoản MongoDB Atlas**:
+   - Truy cập: [https://www.mongodb.com/atlas](https://www.mongodb.com/atlas)
+   - Click "Try Free" → Đăng ký tài khoản (miễn phí)
+
+2. **Tạo Cluster mới**:
+   - Chọn **FREE tier (M0)**
+   - Chọn Cloud Provider & Region (gần bạn nhất)
+   - Đặt tên cluster (ví dụ: `Cluster0`)
+   - Click "Create Cluster" (mất khoảng 1-3 phút)
+
+3. **Tạo Database User**:
+   - Vào **Database Access** (menu bên trái)
+   - Click "Add New Database User"
+   - Chọn "Password" authentication
+   - Nhập username và password (lưu lại!)
+   - Chọn quyền: "Atlas Admin" hoặc "Read and write to any database"
+   - Click "Add User"
+
+4. **Whitelist IP Address**:
+   - Vào **Network Access** (menu bên trái)
+   - Click "Add IP Address"
+   - Chọn "Allow Access from Anywhere" (0.0.0.0/0) cho development
+   - Hoặc thêm IP cụ thể cho production
+   - Click "Confirm"
+
+5. **Lấy Connection String**:
+   - Vào **Database** → Click "Connect" ở cluster của bạn
+   - Chọn "Connect your application"
+   - Chọn Driver: "Node.js", Version: "5.5 or later"
+   - Copy connection string
+   - **Thay thế**: 
+     - `<password>` → password bạn đã tạo ở bước 3
+     - `<dbname>` → tên database (ví dụ: `trade_dapp`)
+   - Paste vào `.env`: `MONGODB_URI=mongodb+srv://...`
+
+**Ví dụ hoàn chỉnh:**
 ```bash
-RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
-RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/YOUR_API_KEY
+MONGODB_URI=mongodb+srv://npthanhnhan2003:123456NTN@cluster0.s1cw26e.mongodb.net/trade_dapp?retryWrites=true&w=majority
+```
+
+---
+
+### 🌐 **3. RPC (EVM Testnets)**
+
+#### `RPC_SEPOLIA` (Ethereum Sepolia Testnet)
+```bash
+RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
 ```
 
 **Cách lấy từ Alchemy:**
-1. **Đăng ký Alchemy**: [https://www.alchemy.com](https://www.alchemy.com)
-2. **Tạo app mới**: Create App → Chọn chain (Ethereum Sepolia / Polygon Amoy)
-3. **Copy API Key**: Dashboard → View Key → HTTP URL
-4. **Paste vào .env**: Thay thế `YOUR_API_KEY`
+
+1. **Đăng ký Alchemy**:
+   - Truy cập: [https://www.alchemy.com](https://www.alchemy.com)
+   - Click "Sign Up" → Đăng ký tài khoản (miễn phí)
+
+2. **Tạo App mới**:
+   - Đăng nhập → Click "Create App"
+   - Đặt tên app (ví dụ: "EVM Wallet - Sepolia")
+   - Chọn Chain: **"Ethereum"**
+   - Chọn Network: **"Sepolia"** (Testnet)
+   - Click "Create App"
+
+3. **Lấy API Key**:
+   - Click vào app vừa tạo
+   - Trong tab "View Key"
+   - Copy **HTTP URL** (có dạng: `https://eth-sepolia.g.alchemy.com/v2/xxxxx`)
+   - Paste vào `.env`: `RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY`
+
+**Alternative - RPC miễn phí (không cần API key):**
+```bash
+# Public RPC (có thể bị rate limit)
+RPC_SEPOLIA=https://rpc.sepolia.org
+
+# Hoặc Infura (cần đăng ký)
+RPC_SEPOLIA=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
+```
+
+#### `RPC_POLYGON_AMOY` (Polygon Amoy Testnet)
+```bash
+RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
+```
+
+**Cách lấy từ Alchemy:**
+
+1. **Tạo App mới cho Polygon Amoy**:
+   - Trong Alchemy Dashboard → Click "Create App"
+   - Đặt tên app (ví dụ: "EVM Wallet - Polygon Amoy")
+   - Chọn Chain: **"Polygon"**
+   - Chọn Network: **"Polygon Amoy"** (Testnet)
+   - Click "Create App"
+
+2. **Lấy API Key**:
+   - Click vào app vừa tạo
+   - Copy **HTTP URL** (có dạng: `https://polygon-amoy.g.alchemy.com/v2/xxxxx`)
+   - Paste vào `.env`: `RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/YOUR_KEY`
 
 **Alternative - RPC miễn phí:**
 ```bash
-# Sepolia (miễn phí)
-RPC_SEPOLIA=https://rpc.sepolia.org
-RPC_SEPOLIA=https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161
-
-# Polygon Amoy (miễn phí)  
+# Public RPC (có thể bị rate limit)
 RPC_POLYGON_AMOY=https://rpc-amoy.polygon.technology
+
+# Hoặc DRPC (miễn phí)
 RPC_POLYGON_AMOY=https://polygon-amoy.drpc.org
 ```
 
-### 👛 **3. Private Key**
+---
+
+### 👛 **4. Wallet (Testnet Account)**
+
+#### `PRIVATE_KEY`
 ```bash
-PRIVATE_KEY=0x1234567890abcdef...
+PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
 ```
 
-**Cách lấy từ MetaMask:**
-1. **Mở MetaMask** → Click avatar → Account details
-2. **Export Private Key** → Nhập password → Copy private key
-3. **⚠️ LƯU Ý**: Chỉ dùng ví testnet, không dùng ví có tiền thật!
+**⚠️ LƯU Ý QUAN TRỌNG**: 
+- **CHỈ DÙNG VÍ TESTNET**, không bao giờ dùng ví có tiền thật!
+- **KHÔNG BAO GIỜ** commit private key lên Git
+- Tạo ví riêng biệt cho development
 
-**Tạo ví testnet mới:**
-1. **MetaMask** → Create Account → Account 2 (dành riêng cho testnet)
-2. **Lấy testnet ETH**: [https://sepoliafaucet.com](https://sepoliafaucet.com)
-3. **Lấy testnet MATIC**: [https://faucet.polygon.technology](https://faucet.polygon.technology)
+**Cách lấy Private Key từ MetaMask:**
 
-### 🔍 **4. Explorer API Keys**
+1. **Mở MetaMask Extension/App**
+
+2. **Export Private Key**:
+   - Click vào avatar/icon account ở góc trên
+   - Chọn **"Account details"**
+   - Click **"Export Private Key"**
+   - Nhập password của MetaMask
+   - Copy private key (có dạng: `0x1234567890abcdef...`)
+
+3. **Paste vào .env**: 
+   ```bash
+   PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+   ```
+
+**Tạo ví testnet mới (Khuyên dùng):**
+
+1. **Tạo Account mới trong MetaMask**:
+   - MetaMask → Click menu (3 dấu gạch ngang)
+   - Chọn **"Create Account"** hoặc **"Add Account"**
+   - Đặt tên: "Testnet Wallet" hoặc "Development"
+   - Click "Create"
+
+2. **Lấy Testnet Tokens** (để deploy contracts):
+   
+   **Sepolia ETH**:
+   - Truy cập: [https://sepoliafaucet.com](https://sepoliafaucet.com)
+   - Hoặc: [https://www.alchemy.com/faucets/ethereum-sepolia](https://www.alchemy.com/faucets/ethereum-sepolia)
+   - Nhập địa chỉ ví → Click "Send Me ETH"
+   - Chờ 1-5 phút để nhận ETH
+
+   **Polygon Amoy MATIC**:
+   - Truy cập: [https://faucet.polygon.technology](https://faucet.polygon.technology)
+   - Chọn "Polygon Amoy Testnet"
+   - Nhập địa chỉ ví → Click "Submit"
+   - Chờ 1-5 phút để nhận MATIC
+
+3. **Export Private Key của ví testnet mới** (theo bước 2 ở trên)
+
+---
+
+### 🏗️ **5. Smart Contract Addresses (sẽ có sau khi deploy)**
+
+#### `LIMIT_ORDER_ADDRESS_SEPOLIA`
 ```bash
-ETHERSCAN_API_KEY=ABC123XYZ789
-POLYGONSCAN_API_KEY=DEF456UVW012
+LIMIT_ORDER_ADDRESS_SEPOLIA=0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
 ```
 
-**Etherscan API Key:**
-1. **Đăng ký**: [https://etherscan.io/register](https://etherscan.io/register)
-2. **Tạo API Key**: My Account → API Keys → Add → Copy API Key Token
-
-**Polygonscan API Key:**
-1. **Đăng ký**: [https://polygonscan.com/register](https://polygonscan.com/register)  
-2. **Tạo API Key**: My Account → API Keys → Add → Copy API Key Token
-
-### 📦 **5. IPFS Storage**
+#### `LIMIT_ORDER_ADDRESS_POLYGON`
 ```bash
-IPFS_PROVIDER=web3storage
+LIMIT_ORDER_ADDRESS_POLYGON=0x8ba1f109551bD432803012645Hac136c0567890
+```
+
+**Cách lấy Contract Addresses:**
+
+1. **Deploy Contracts**:
+   ```bash
+   # Deploy lên Sepolia
+   npx hardhat run scripts/deploy.js --network sepolia
+   
+   # Deploy lên Polygon Amoy
+   npx hardhat run scripts/deploy.js --network polygonAmoy
+   ```
+
+2. **Copy Address từ Console Output**:
+   - Sau khi deploy thành công, bạn sẽ thấy output như:
+   ```
+   ✅ LimitOrder deployed to: 0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
+   ```
+   - Copy địa chỉ này
+
+3. **Paste vào .env**:
+   ```bash
+   LIMIT_ORDER_ADDRESS_SEPOLIA=0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
+   LIMIT_ORDER_ADDRESS_POLYGON=0x8ba1f109551bD432803012645Hac136c0567890
+   ```
+
+**Lưu ý**: Để trống cho đến khi deploy contracts xong!
+
+---
+
+### 📦 **6. IPFS Storage**
+
+#### `IPFS_PROVIDER`
+```bash
+IPFS_PROVIDER=web3storage  # hoặc pinata
+```
+
+#### `IPFS_API_KEY`
+```bash
 IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-**Web3.Storage (Miễn phí):**
-1. **Đăng ký**: [https://web3.storage](https://web3.storage)
-2. **Tạo API Token**: Account → Create an API Token → Copy token
-3. **Paste vào .env**: `IPFS_API_KEY=eyJhbGci...`
+**Cách lấy từ Web3.Storage (Miễn phí, Khuyên dùng):**
 
-**Pinata (Alternative):**
-1. **Đăng ký**: [https://pinata.cloud](https://pinata.cloud)
-2. **Tạo API Key**: API Keys → New Key → Copy JWT
-3. **Cấu hình**:
+1. **Đăng ký tài khoản**:
+   - Truy cập: [https://web3.storage](https://web3.storage)
+   - Click "Sign Up" → Đăng ký bằng email hoặc GitHub
+   - Xác nhận email
+
+2. **Tạo API Token**:
+   - Đăng nhập → Click **"Create API Token"** ở dashboard
+   - Đặt tên token (ví dụ: "EVM Wallet Development")
+   - Click "Create"
+   - **Copy token ngay** (chỉ hiện 1 lần! Lưu lại)
+
+3. **Paste vào .env**:
+   ```bash
+   IPFS_PROVIDER=web3storage
+   IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjpleGFtcGxl...
+   ```
+
+**Alternative - Pinata:**
+
+1. **Đăng ký Pinata**:
+   - Truy cập: [https://pinata.cloud](https://pinata.cloud)
+   - Click "Sign Up" → Đăng ký tài khoản
+
+2. **Tạo API Key**:
+   - Đăng nhập → Vào **"API Keys"**
+   - Click **"New Key"**
+   - Đặt tên key
+   - Chọn quyền: "PinFileToIPFS", "PinJSONToIPFS"
+   - Click "Create Key"
+   - Copy **JWT Token**
+
+3. **Cấu hình trong .env**:
+   ```bash
+   IPFS_PROVIDER=pinata
+   IPFS_API_KEY=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   ```
+
+---
+
+### 🔍 **7. Verify (Optional - cho deploy scripts)**
+
+#### `ETHERSCAN_API_KEY`
 ```bash
-IPFS_PROVIDER=pinata
-IPFS_API_KEY=Bearer eyJhbGci...
+ETHERSCAN_API_KEY=ABC123XYZ789DEF456GHI012
 ```
 
-### 🏗️ **6. Contract Addresses (Sau khi deploy)**
+**Cách lấy Etherscan API Key:**
+
+1. **Đăng ký Etherscan**:
+   - Truy cập: [https://etherscan.io/register](https://etherscan.io/register)
+   - Điền thông tin → Click "Create Account"
+   - Xác nhận email
+
+2. **Tạo API Key**:
+   - Đăng nhập → Click **"My Account"** (góc trên bên phải)
+   - Vào tab **"API-KEYs"**
+   - Click **"Add"** để tạo API key mới
+   - Đặt tên (ví dụ: "Development")
+   - Click "Create"
+   - Copy **API Key Token**
+
+3. **Paste vào .env**:
+   ```bash
+   ETHERSCAN_API_KEY=ABC123XYZ789DEF456GHI012JKL345MNO678
+   ```
+
+#### `POLYGONSCAN_API_KEY`
 ```bash
-LIMIT_ORDER_ADDRESS_SEPOLIA=0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
-TRADE_TOKEN_ADDRESS_SEPOLIA=0x8ba1f109551bD432803012645Hac136c0567890
+POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123
 ```
 
-**Cách lấy:**
-1. **Deploy contracts**: `npx hardhat run scripts/deploy.js --network sepolia`
-2. **Copy addresses** từ console output
-3. **Paste vào .env**: Cập nhật từng contract address
+**Cách lấy Polygonscan API Key:**
+
+1. **Đăng ký Polygonscan**:
+   - Truy cập: [https://polygonscan.com/register](https://polygonscan.com/register)
+   - Điền thông tin → Click "Create Account"
+   - Xác nhận email
+
+2. **Tạo API Key**:
+   - Đăng nhập → Click **"My Account"** (góc trên bên phải)
+   - Vào tab **"API-KEYs"**
+   - Click **"Add"** để tạo API key mới
+   - Đặt tên (ví dụ: "Development")
+   - Click "Create"
+   - Copy **API Key Token**
+
+3. **Paste vào .env**:
+   ```bash
+   POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123EFG456
+   ```
+
+**Lưu ý**: API keys này chỉ cần khi bạn muốn verify contracts trên explorer. Có thể để trống nếu không cần verify.
+
+---
+
+### 🚦 **8. Rate Limiting**
+
+#### `RATE_LIMIT_WINDOW_MS`
+```bash
+RATE_LIMIT_WINDOW_MS=900000  # 15 phút = 900,000 milliseconds
+```
+
+**Giá trị**: Thời gian window tính bằng milliseconds
+- `60000` = 1 phút
+- `300000` = 5 phút
+- `900000` = 15 phút (khuyên dùng)
+
+#### `RATE_LIMIT_MAX_REQUESTS`
+```bash
+RATE_LIMIT_MAX_REQUESTS=100  # Số requests tối đa trong window
+```
+
+**Giá trị**: Số lượng requests tối đa trong một window
+- `60` = 60 requests
+- `100` = 100 requests (khuyên dùng)
+- `200` = 200 requests
+
+**Giải thích**: Nếu set `RATE_LIMIT_WINDOW_MS=900000` và `RATE_LIMIT_MAX_REQUESTS=100`, nghĩa là cho phép tối đa 100 requests trong 15 phút từ cùng 1 IP.
+
+---
+
+### 🛡️ **9. Security & Logs**
+
+#### `CORS_ORIGIN`
+```bash
+CORS_ORIGIN=http://localhost:3000
+```
+
+**Giá trị**: URL của frontend application
+- Development: `http://localhost:3000`
+- Multiple origins: `http://localhost:3000,https://yourdomain.com`
+- Production: `https://yourdomain.com`
+
+**Lưu ý**: Nếu frontend chạy trên port khác, thay đổi cho phù hợp.
+
+#### `LOG_LEVEL`
+```bash
+LOG_LEVEL=info
+```
+
+**Giá trị có thể**:
+- `error` - Chỉ log lỗi
+- `warn` - Log cảnh báo và lỗi
+- `info` - Log thông tin, cảnh báo và lỗi (khuyên dùng cho production)
+- `debug` - Log chi tiết (cho development)
+- `trace` - Log tất cả (rất chi tiết, chỉ cho debug)
+
+---
 
 ### 📝 **File .env Hoàn Chỉnh Mẫu**
+
 ```bash
-# --- GENERAL CONFIG ---
+# ===== Environment Config =====
 NODE_ENV=development
 PORT=4000
 
-# --- DATABASE ---
-MONGO_URI=mongodb+srv://myuser:mypass123@cluster0.abc123.mongodb.net/evm-multichain-wallet?retryWrites=true&w=majority
+# ===== MongoDB (Database) =====
+MONGODB_URI=mongodb+srv://npthanhnhan2003:123456NTN@cluster0.s1cw26e.mongodb.net/trade_dapp?retryWrites=true&w=majority
 
-# --- RPC PROVIDERS ---
-RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/abc123def456ghi789
-RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/xyz789uvw456rst123
+# ===== RPC (EVM Testnets) =====
+RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/abc123def456ghi789jkl012mno345pqr678
+RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/xyz789uvw456rst123tuv456wxy789
 
-# --- WALLET / DEPLOYER ---
+# ===== Wallet (Testnet Account) =====
 PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
 
-# --- SMART CONTRACT ADDRESSES ---
-LIMIT_ORDER_ADDRESS_SEPOLIA=0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
-LIMIT_ORDER_ADDRESS_POLYGON=0x8ba1f109551bD432803012645Hac136c0567890
-TRADE_TOKEN_ADDRESS_SEPOLIA=0x123456789abcdef123456789abcdef1234567890
-TRADE_TOKEN_ADDRESS_POLYGON=0xabcdef123456789abcdef123456789abcdef1234
+# ===== Smart Contract Addresses (sẽ có sau khi deploy) =====
+LIMIT_ORDER_ADDRESS_SEPOLIA=
+LIMIT_ORDER_ADDRESS_POLYGON=
 
-# --- IPFS STORAGE ---
+# ===== IPFS Storage =====
 IPFS_PROVIDER=web3storage
-IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjp4MTIz
+IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjpleGFtcGxl...
 
-# --- SECURITY & LOGGING ---
-CORS_ORIGIN=http://localhost:3000
-RATE_LIMIT=60
-LOG_LEVEL=info
-
-# --- ETHERSCAN / POLYGONSCAN ---
+# ===== Verify (optional for deploy scripts) =====
 ETHERSCAN_API_KEY=ABC123XYZ789DEF456GHI012JKL345MNO678
 POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123EFG456
+
+# ===== Rate Limiting =====
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# ===== Security & Logs =====
+CORS_ORIGIN=http://localhost:3000
+LOG_LEVEL=info
 ```
 
 ---
