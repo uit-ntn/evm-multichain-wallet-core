@@ -6,19 +6,6 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 100
-  },
-  
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  
   address: {
     type: String,
     required: true,
@@ -32,11 +19,32 @@ const userSchema = new mongoose.Schema({
       message: 'Invalid Ethereum address format'
     }
   },
-  
+
+  displayName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+
+  nonce: {
+    type: String,
+    default: ''
+  },
+
   role: {
     type: String,
     enum: ['user', 'admin'],
     default: 'user'
+  },
+
+  stakedAmount: {
+    type: String,
+    default: '0'
+  },
+
+  tier: {
+    type: String,
+    default: 'Bronze'
   }
 }, {
   timestamps: true, // Tự động tạo createdAt và updatedAt

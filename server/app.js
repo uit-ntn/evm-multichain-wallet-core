@@ -18,7 +18,7 @@ const { errorHandler, notFound } = require('./middlewares/errorHandler');
 const connectDB = require('./config/DBConfig');
 
 // Import routes
-// const authRoutes = require('./routes/auth.route');
+const authRoutes = require('./routes/auth.route');
 const userRoutes = require('./routes/user.route');
 // const orderRoutes = require('./routes/order.route');
 // const transactionRoutes = require('./routes/transaction.route');
@@ -74,7 +74,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-// app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 // app.use('/api/orders', orderRoutes);
 // app.use('/api/transactions', transactionRoutes);

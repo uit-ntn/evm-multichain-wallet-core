@@ -188,7 +188,9 @@ const errorLogger = morgan(
 function requestIdMiddleware(req, res, next) {
   req.id = req.headers['x-request-id'] || 
            `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  res.setHeader('X-Request-ID', req.id);
+  if (!res.headersSent) {
+    res.setHeader('X-Request-ID', req.id);
+  }
   next();
 }
 
@@ -200,7 +202,9 @@ function responseTimeMiddleware(req, res, next) {
   
   res.on('finish', () => {
     const duration = Date.now() - start;
-    res.setHeader('X-Response-Time', duration);
+    if (!res.headersSent) {
+      res.setHeader('X-Response-Time', duration);
+    }
   });
   
   next();
