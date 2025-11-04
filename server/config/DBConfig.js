@@ -1,33 +1,38 @@
-const mongoose = require('mongoose');
+/**
+ * MongoDB Connection (ESM)
+ * Compatible with "type": "module"
+ */
 
-const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/evm-multichain-wallet';
+import mongoose from "mongoose";
 
-const connectDB = async () => {
-    try {
-        const conn = await mongoose.connect(mongoURI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
-        });
-        
-        console.log(`MongoDB Connected: ${conn.connection.host}`);
-        
-        // Handle connection events
-        mongoose.connection.on('error', (err) => {
-            console.error('MongoDB connection error:', err);
-        });
+const mongoURI = process.env.MONGO_URI || "mongodb://localhost:27017/evm-multichain-wallet";
 
-        mongoose.connection.on('disconnected', () => {
-            console.log('MongoDB disconnected');
-        });
+export async function connectDB() {
+  try {
+    const conn = await mongoose.connect(mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
 
-        mongoose.connection.on('reconnected', () => {
-            console.log('MongoDB reconnected');
-        });
+    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
 
-    } catch (error) {
-        console.error(`Error connecting to MongoDB: ${error.message}`);
-        process.exit(1);
-    }
-};
+    mongoose.connection.on("error", (err) => {
+      console.error("❌ MongoDB connection error:", err);
+    });
 
-module.exports = connectDB;
+    mongoose.connection.on("disconnected", () => {
+      console.warn("⚠️ MongoDB disconnected");
+    });
+
+    mongoose.connection.on("reconnected", () => {
+      console.log("🔄 MongoDB reconnected");
+    });
+
+    return conn;
+  } catch (error) {
+    console.error(`❌ Error connecting to MongoDB: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+export default connectDB;

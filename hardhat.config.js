@@ -1,8 +1,10 @@
-require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config();
+// hardhat.config.js (ESM)
+import "@nomicfoundation/hardhat-toolbox";
+import dotenv from "dotenv";
+dotenv.config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
-module.exports = {
+export default {
   solidity: {
     version: "0.8.20",
     settings: {
@@ -12,7 +14,7 @@ module.exports = {
       },
     },
   },
-  
+
   networks: {
     // Sepolia Testnet
     sepolia: {
@@ -20,7 +22,7 @@ module.exports = {
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 11155111,
     },
-    
+
     // Polygon Amoy Testnet
     polygonAmoy: {
       url: process.env.RPC_POLYGON_AMOY || "",
@@ -28,14 +30,11 @@ module.exports = {
       chainId: 80002,
     },
   },
-  
+
   etherscan: {
-    apiKey: {
-      sepolia: process.env.ETHERSCAN_API_KEY || "",
-      polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
-    },
+    apiKey: process.env.ETHERSCAN_API_KEY,
   },
-  
+
   paths: {
     sources: "./contracts",
     tests: "./test",
@@ -43,4 +42,3 @@ module.exports = {
     artifacts: "./artifacts",
   },
 };
-

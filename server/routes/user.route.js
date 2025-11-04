@@ -3,11 +3,14 @@
  * Định nghĩa các routes cho users
  */
 
-const express = require('express');
+import express from 'express';
+// Bạn có thể cần thêm .js ở cuối, tùy thuộc vào cấu hình project
+import userController from '../controllers/userController.js'; 
+
 const router = express.Router();
-const userController = require('../controllers/userController');
 
 // GET /api/users - Get all users
 router.get('/', userController.getAllUsers);
 
-module.exports = router;
+// Thay thế "module.exports" bằng "export default"
+export default router;

@@ -1,60 +1,40 @@
-const { ethers } = require('ethers');
+import { ethers } from "ethers";
 
-const formatResponse = (success, data, message = null) => {
+export const formatResponse = (success, data, message = null) => {
   const response = { success };
-  
-  if (success) {
-    response.data = data;
-  } else {
-    response.error = data;
-  }
-  
-  if (message) {
-    response.message = message;
-  }
-  
+  if (success) response.data = data;
+  else response.error = data;
+  if (message) response.message = message;
   return response;
 };
 
-const isValidAddress = (address, type = 'evm') => {
-  if (type === 'evm') {
-    return ethers.isAddress(address);
-  }
-  
-  if (type === 'sui') {
-    // Basic Sui address validation (0x followed by 64 hex characters)
-    const suiAddressRegex = /^0x[a-fA-F0-9]{64}$/;
-    return suiAddressRegex.test(address);
-  }
-  
+export const isValidAddress = (address, type = "evm") => {
+  if (type === "evm") return ethers.isAddress(address);
+  if (type === "sui") return /^0x[a-fA-F0-9]{64}$/.test(address);
   return false;
 };
 
-const formatBalance = (balance, decimals = 18, symbol = '') => {
+export const formatBalance = (balance, decimals = 18, symbol = "") => {
   const formatted = ethers.formatUnits(balance, decimals);
   return {
     raw: balance.toString(),
     formatted: parseFloat(formatted).toFixed(6),
-    symbol
+    symbol,
   };
 };
 
-const formatSuiBalance = (balance) => {
-  // SUI has 9 decimals, balance is in MIST
-  const sui = parseFloat(balance) / 1000000000;
-  return {
-    raw: balance.toString(),
-    formatted: sui.toFixed(6),
-    symbol: 'SUI'
-  };
-};
+export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-module.exports = {
-  formatResponse,
-  isValidAddress,
-  formatBalance,
-  formatSuiBalance,
-  delay
-};
+/**
+ * Verify EIP-712 signature
+ */
+export async function verifyEIP712Signature(typedData, signature) {
+  try {
+    const { domain, types, message } = typedData;
+    const recovered = ethers.verifyTypedData(domain, types, message, signature);
+    return recovered.toLowerCase();
+  } catch (err) {
+    console.error("Signature verification failed:", err.message);
+    return null;
+  }
+}

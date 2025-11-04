@@ -3,8 +3,10 @@
  * Xử lý các HTTP requests liên quan đến user
  */
 
-const userService = require('../services/user.service');
-const { logger } = require('../adapters/logger.adapter');
+// Đổi 'require' sang 'import'
+// Thêm .js ở cuối (thường là bắt buộc trong ES Modules)
+import userService from '../services/user.service.js';
+import { logger } from '../adapters/logger.adapter.js';
 
 const getAllUsers = async (req, res) => {
   try {
@@ -39,7 +41,7 @@ const getAllUsers = async (req, res) => {
     }
 
     // Lấy dữ liệu người dùng với phân trang
-    const users = await userService.getAllUsers({ page, limit }); // cần sửa service nếu chưa có hỗ trợ phân trang
+    const users = await userService.getAllUsers({ page, limit });
 
     // 200 OK – Trả danh sách
     return res.status(200).json(users);
@@ -50,6 +52,10 @@ const getAllUsers = async (req, res) => {
   }
 };
 
-module.exports = {
+// Đổi 'module.exports = { ... }' thành 'export default { ... }'
+// File router của bạn (user.route.js) đang import `userController`
+// và mong đợi nó là một object có chứa hàm `getAllUsers`.
+// `export default` sẽ đảm bảo điều đó.
+export default {
   getAllUsers,
 };
