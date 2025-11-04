@@ -108,8 +108,80 @@ const upsertUserByAddress = async ({ address, displayName, role }) => {
     throw error;
   }
 };
+
+/**
+ * Xoá user theo address (Admin)
+ * @param {string} address - địa chỉ ví cần xoá
+ * @param {boolean} anonymize - true = xoá mềm (ẩn danh), false = xoá cứng
+ * @returns {Promise<boolean>} true nếu đã xoá, false nếu user không tồn tại
+ */
+const deleteUserByAddress = async (address, anonymize = false) => {
+  try {
+    const addr = address.toLowerCase();
+    const user = await User.findOne({ address: addr });
+
+    // Nếu không tồn tại → idempotent: vẫn trả true
+    if (!user) return false;
+
+    if (anonymize) {
+      // Xoá mềm: chỉ ẩn danh, không xoá record
+      user.displayName = "";
+      user.nonce = "";
+      user.tier = "Bronze";
+      user.stakedAmount = "0";
+      await user.save();
+      logger.info("User anonymized", { address: addr });
+      return true;
+    }
+
+    // Xoá cứng khỏi DB
+    await User.deleteOne({ address: addr });
+    logger.info("User deleted", { address: addr });
+    return true;
+  } catch (error) {
+    logger.error("Error deleting user", { error: error.message });
+    throw error;
+  }
+};
+
+// /**
+//  * Cập nhật tier dựa trên stakedAmount
+//  * @param {string} address - địa chỉ ví user
+//  * @param {string} newStakeAmount - số lượng token đã stake (wei)
+//  * @returns {Promise<Object>} user sau khi cập nhật
+//  */
+// const updateStakeTier = async (address, newStakeAmount) => {
+//   try {
+//     const addr = address.toLowerCase();
+//     const user = await User.findOne({ address: addr });
+//     if (!user) throw new Error("User not found");
+
+//     // Cập nhật lượng stake
+//     user.stakedAmount = newStakeAmount;
+
+//     // Chuyển từ wei → TRADE (nếu bạn dùng 18 decimals)
+//     const stakeInTrade = parseFloat(newStakeAmount) / 1e18;
+
+//     // Xác định tier theo lượng stake
+//     if (stakeInTrade >= 10000) user.tier = "Platinum";
+//     else if (stakeInTrade >= 5000) user.tier = "Gold";
+//     else if (stakeInTrade >= 1000) user.tier = "Silver";
+//     else user.tier = "Bronze";
+
+//     await user.save();
+
+//     logger.info("Tier updated", { address: addr, tier: user.tier });
+//     return user;
+//   } catch (error) {
+//     logger.error("Error updating user tier", { error: error.message });
+//     throw error;
+//   }
+// };
+
     
 module.exports = {
   getAllUsers,
   upsertUserByAddress,
+  deleteUserByAddress,
+  // updateStakeTier,
 };

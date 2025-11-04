@@ -7,10 +7,10 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 
-// GET /api/users - Get all users
+// Get all users
 router.get('/', userController.getAllUsers);
 
-// POST /api/users - Upsert user by address (controller will validate JWT)
+// Upsert user by address (controller will validate JWT)
 if (userController && typeof userController.upsertUser === 'function') {
   router.post('/', userController.upsertUser);
 } else {
@@ -20,5 +20,8 @@ if (userController && typeof userController.upsertUser === 'function') {
 
 // Liệt kê user (chỉ admin)
 router.get('/', userController.getAllUsers);
+
+// Xoá user (chỉ admin)
+router.delete("/:address", userController.deleteUser);
 
 module.exports = router;

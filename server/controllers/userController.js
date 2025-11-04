@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const userService = require('../services/user.service');
 const { logger } = require('../adapters/logger.adapter');
 const { jwt: jwtConfig } = require('../config');
+const User = require('../models/user.model');
 
 /**
  * GET /api/users
@@ -153,7 +154,61 @@ const upsertUser = async (req, res) => {
   }
 };
 
+/**
+ * DELETE /api/users/:address
+ * [D] Xoá user (chỉ admin)
+ */
+const deleteUser = async (req, res) => {
+  try {
+    // 🧩 1. Kiểm tra JWT
+    const authHeader = req.headers["authorization"] || req.headers["Authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: Missing token" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let payload;
+    try {
+      payload = jwt.verify(token, jwtConfig.secret);
+    } catch (err) {
+      return res.status(401).json({ error: "Unauthorized: Invalid token" });
+    }
+
+    // 🧩 2. Chỉ admin mới được xoá
+    if (payload.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    // 🧩 3. Lấy địa chỉ user cần xoá
+    const { address } = req.params;
+    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      return res.status(400).json({ error: "Bad Request: Invalid address format" });
+    }
+
+    // 🧩 4. Tìm user trong DB
+    const user = await User.findOne({ address: address.toLowerCase() });
+    if (!user) {
+      // Idempotent – vẫn trả OK
+      return res.status(200).json({ message: "deleted", address });
+    }
+
+    // 🧩 5. Service call: Thực hiện xoá (hard delete hoặc anonymize)
+    const deleted = await userService.deleteUserByAddress(address, false); // false = xoá cứng
+    if (!deleted) {
+      return res.status(200).json({ message: "deleted", address });
+    }
+    logger.info("User deleted", { address });
+
+    // 🧩 6. Trả kết quả
+    return res.status(200).json({ message: "deleted", address });
+  } catch (error) {
+    logger.error("Error deleting user", { error: error.message });
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 module.exports = {
   getAllUsers,
   upsertUser,
+  deleteUser,
 };
