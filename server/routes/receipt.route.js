@@ -3,13 +3,13 @@
  * Định nghĩa các routes cho IPFS receipts
  */
 
-const express = require('express');
-const router = express.Router();
-const receiptController = require('../controllers/receiptController');
+const express = require("express");
 const multer = require("multer");
 const path = require("path");
-const { uploadReceipt } = require("../controllers/receipt.controller");
+const { uploadReceipts } = require("../controllers/receiptController");
 const { defaultRateLimit } = require("../middlewares/rateLimiter");
+
+const router = express.Router();
 
 // Cấu hình lưu file tạm
 const upload = multer({
@@ -17,8 +17,7 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // Giới hạn 10MB
 });
 
-// POST /api/receipts
-router.post("/", defaultRateLimit, upload.single("file"), uploadReceipt);
+// POST /api/receipts (PDF + JSON)
+router.post("/", defaultRateLimit, upload.array("files", 2), uploadReceipts);
 
 module.exports = router;
-

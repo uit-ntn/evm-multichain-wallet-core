@@ -1,62 +1,74 @@
 /**
  * Receipt Controller
- * Xử lý các HTTP requests liên quan đến IPFS receipts
+ * Xử lý HTTP request liên quan đến biên lai (PDF/JSON → IPFS)
  */
 
-const receiptService = require('../services/receipt.service');
-const { logger } = require('../adapters/logger.adapter');
-const jwt = require("jsonwebtoken");
 const { uploadToIPFS } = require("../services/receipt.service");
+const { logger } = require("../adapters/logger.adapter");
+const jwt = require("jsonwebtoken");
 const { jwt: jwtConfig } = require("../config");
 
 /**
- * Receipt Controller
- * Upload biên lai (PDF/JSON) lên IPFS
+ * POST /api/receipts
+ * Upload biên lai (PDF/JSON) lên IPFS (multipart/form-data)
  */
-const uploadReceipt = async (req, res) => {
+const uploadReceipts = async (req, res) => {
   try {
-    // ✅ 1. Kiểm tra JWT
+    // 🧩 1. Xác thực JWT
     const authHeader = req.headers["authorization"];
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!authHeader || !authHeader.startsWith("Bearer "))
       return res.status(401).json({ error: "Unauthorized: Missing token" });
-    }
 
-    const token = authHeader.split(" ")[1];
-    let payload;
+    let token;
     try {
-      payload = jwt.verify(token, jwtConfig.secret);
+      token = jwt.verify(authHeader.split(" ")[1], jwtConfig.secret);
     } catch {
       return res.status(401).json({ error: "Unauthorized: Invalid token" });
     }
 
-    // ✅ 2. Kiểm tra multipart form
-    if (!req.file) {
-      return res.status(400).json({ error: "Missing file" });
-    }
-
+    // 🧩 2. Kiểm tra dữ liệu đầu vào
+    const files = req.files;
     const { txHash, owner } = req.body;
-    if (!txHash || !owner) {
+
+    if (!files || files.length === 0)
+      return res.status(400).json({ error: "Missing file" });
+    if (!txHash || !owner)
       return res.status(400).json({ error: "Missing txHash or owner" });
-    }
 
-    // ✅ 3. Kiểm tra định dạng
+    // 🧩 3. Kiểm tra định dạng file
     const allowedTypes = ["application/pdf", "application/json"];
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      return res.status(415).json({ error: "Unsupported Media Type" });
+    for (const f of files) {
+      if (!allowedTypes.includes(f.mimetype)) {
+        return res
+          .status(415)
+          .json({ error: `Unsupported Media Type: ${f.originalname}` });
+      }
     }
 
-    // ✅ 4. Upload lên IPFS
-    const { cid, url } = await uploadToIPFS(req.file.path, req.file.originalname);
+    // 🧩 4. Upload từng file lên IPFS
+    const uploads = [];
+    for (const f of files) {
+      const uploaded = await uploadToIPFS(f.path, f.originalname);
+      uploads.push(uploaded);
+    }
 
-    // ✅ 5. Trả kết quả
-    return res.status(201).json({ cid, url, txHash });
+    // 🧩 5. Trả kết quả
+    return res.status(201).json({
+      txHash,
+      owner,
+      files: uploads.map((u) => ({
+        cid: u.cid,
+        url: u.url,
+      })),
+    });
   } catch (error) {
-    console.error("Upload receipt error:", error);
-    if (error.message.includes("limit file size")) {
+    logger.error("Error uploading receipts", { error: error.message });
+
+    if (error.message.includes("File too large"))
       return res.status(413).json({ error: "Payload Too Large" });
-    }
-    return res.status(500).json({ error: error.message });
+
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-module.exports = { uploadReceipt };
+module.exports = { uploadReceipts };
