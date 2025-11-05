@@ -1,10 +1,10 @@
 /**
- * Logger Adapter (ESM)
+ * Logger Adapter (CommonJS)
  * Centralized logging for application, HTTP, DB, blockchain, and IPFS
  */
 
-import morgan from "morgan";
-import { config } from "./config.adapter.js";
+const morgan = require("morgan");
+const { config } = require("./config.adapter");
 
 const levels = { error: 0, warn: 1, info: 2, debug: 3, trace: 4 };
 const currentLevel = levels[config.logLevel] ?? levels.info;
@@ -16,7 +16,7 @@ function print(level, message, meta = {}) {
   console.log(`[${ts}] ${level.toUpperCase()}: ${message}${formattedMeta}`);
 }
 
-export const logger = {
+const logger = {
   error: (msg, meta = {}) => print("error", msg, meta),
   warn: (msg, meta = {}) => print("warn", msg, meta),
   info: (msg, meta = {}) => print("info", msg, meta),
@@ -35,11 +35,11 @@ export const logger = {
 };
 
 // === Morgan HTTP loggers ===
-export const httpLogger = morgan("dev");
-export const errorLogger = morgan("dev");
+const httpLogger = morgan("dev");
+const errorLogger = morgan("dev");
 
 // === Middleware ===
-export function requestIdMiddleware(req, res, next) {
+function requestIdMiddleware(req, res, next) {
   req.id =
     req.headers["x-request-id"] ||
     `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -47,10 +47,9 @@ export function requestIdMiddleware(req, res, next) {
   next();
 }
 
-export function responseTimeMiddleware(req, res, next) {
+function responseTimeMiddleware(req, res, next) {
   const start = Date.now();
 
-  // Hook vào res.send để thêm header *trước khi gửi response*
   const originalSend = res.send;
   res.send = function (body) {
     const duration = Date.now() - start;
@@ -64,7 +63,7 @@ export function responseTimeMiddleware(req, res, next) {
 }
 
 // === Helper log functions ===
-export function logDatabaseQuery(collection, operation, query = {}, duration = 0) {
+function logDatabaseQuery(collection, operation, query = {}, duration = 0) {
   logger.debug("Database Query", {
     collection,
     operation,
@@ -73,7 +72,7 @@ export function logDatabaseQuery(collection, operation, query = {}, duration = 0
   });
 }
 
-export function logBlockchainTransaction(chainId, txHash, status, gasUsed = null) {
+function logBlockchainTransaction(chainId, txHash, status, gasUsed = null) {
   logger.info("Blockchain Transaction", {
     chainId,
     txHash,
@@ -82,7 +81,7 @@ export function logBlockchainTransaction(chainId, txHash, status, gasUsed = null
   });
 }
 
-export function logIpfsOperation(operation, cid, status, error = null) {
+function logIpfsOperation(operation, cid, status, error = null) {
   const logLevel = error ? "error" : "info";
   logger[logLevel]("IPFS Operation", {
     operation,
@@ -92,7 +91,20 @@ export function logIpfsOperation(operation, cid, status, error = null) {
   });
 }
 
-export function logPerformance(operation, duration, metadata = {}) {
+function logPerformance(operation, duration, metadata = {}) {
   const level = duration > 1000 ? "warn" : "debug";
   logger[level]("Performance", { operation, duration: `${duration}ms`, ...metadata });
 }
+
+// === Exports ===
+module.exports = {
+  logger,
+  httpLogger,
+  errorLogger,
+  requestIdMiddleware,
+  responseTimeMiddleware,
+  logDatabaseQuery,
+  logBlockchainTransaction,
+  logIpfsOperation,
+  logPerformance,
+};

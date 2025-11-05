@@ -1,14 +1,27 @@
-import { ethers } from "ethers";
+/**
+ * sign-order.js (CommonJS)
+ * Tạo chữ ký EIP-712 LimitOrder an toàn (dùng PRIVATE_KEY trong .env)
+ */
 
-const wallet = new ethers.Wallet(
-  "1762b83287a288fa794da5e9a1cda9755253cac78aa6671a857da2e409e3e8c3"
-);
-console.log("Wallet:", await wallet.getAddress());
+const { ethers } = require("ethers");
+const dotenv = require("dotenv");
+const fs = require("fs");
+
+dotenv.config();
+
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+if (!PRIVATE_KEY) {
+  console.error("❌ PRIVATE_KEY not found in .env");
+  process.exit(1);
+}
+
+// ---- Config ----
+const wallet = new ethers.Wallet(PRIVATE_KEY);
 
 const domain = {
   name: "LimitOrder",
   version: "1",
-  chainId: 11155111,
+  chainId: 11155111, // Sepolia
   verifyingContract: "0x02f5d533E0a3fEF9995b285b0bd2AFF6deeb721d",
 };
 
@@ -22,9 +35,8 @@ const types = {
   ],
 };
 
-// deadline = hiện tại + 1h
-const deadline = Math.floor(Date.now() / 1000) + 3600;
-
+// ---- Message (order) ----
+const deadline = Math.floor(Date.now() / 1000) + 3600; // +1h
 const message = {
   tokenIn: "0x0000000000000000000000000000000000000001",
   tokenOut: "0x0000000000000000000000000000000000000002",
@@ -33,7 +45,22 @@ const message = {
   deadline,
 };
 
-console.log("Message:", message);
+// ---- Sign ----
+(async () => {
+  console.log(`🔐 Wallet: ${wallet.address}`);
 
-const signature = await wallet.signTypedData(domain, types, message);
-console.log("Signature:", signature);
+  // ⚠️ ethers v5 dùng _signTypedData thay vì signTypedData
+  const signature = await wallet._signTypedData(domain, types, message);
+
+  const signedData = {
+    user: wallet.address,
+    ...message,
+    signature,
+  };
+
+  // Xuất file JSON an toàn để dán vào Postman
+  fs.writeFileSync("signed_order.json", JSON.stringify(signedData, null, 2));
+
+  console.log("✅ Order signed successfully!");
+  console.log("📄 Saved to signed_order.json");
+})();

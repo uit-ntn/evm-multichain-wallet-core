@@ -1,6 +1,11 @@
-import { orderService } from "../services/order.service.js";
+/**
+ * Order Controller (CommonJS)
+ * Handles HTTP requests for order endpoints
+ */
 
-export const orderController = {
+const { orderService } = require("../services/order.service");
+
+const orderController = {
   async create(req, res) {
     const result = await orderService.createOrder(req.body);
     res.status(result.success ? 201 : 400).json(result);
@@ -42,3 +47,5 @@ export const orderController = {
     res.status(result.success ? 200 : 400).json(result);
   },
 };
+
+module.exports = { orderController };

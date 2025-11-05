@@ -1,23 +1,21 @@
-import fs from "fs";
-import path from "path";
-import { ethers } from "ethers";
-import Order from "../models/order.model.js";
-import { logger, logDatabaseQuery, logBlockchainTransaction } from "../adapters/logger.adapter.js";
-import { getContractWithSigner } from "../adapters/blockchain.adapter.js";
-import { formatResponse, verifyEIP712Signature } from "../utils/helpers.js";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const fs = require("fs");
+const path = require("path");
+const { ethers } = require("ethers");
+const Order = require("../models/order.model");
+const { logger, logDatabaseQuery, logBlockchainTransaction } = require("../adapters/logger.adapter");
+const { getContractWithSigner } = require("../adapters/blockchain.adapter");
+const { formatResponse, verifyEIP712Signature } = require("../utils/helpers");
 
 const abiPath = path.resolve(__dirname, "../../artifacts/contracts/LimitOrder.sol/LimitOrder.json");
 const LimitOrderABI = JSON.parse(fs.readFileSync(abiPath, "utf8")).abi;
 
 const CONTRACT_NAME = "limitOrder";
-const CHAIN_ID = 11155111; // Sepolia
+const CHAIN_ID = 11155111;
 
-export const orderService = {
-  /** Create new order (on-chain + DB) */
+const orderService = {
+  // =====================================================
+  // 1️⃣ CREATE ORDER
+  // =====================================================
   async createOrder(orderData) {
     const { user, tokenIn, tokenOut, amountIn, targetPrice, deadline, signature } = orderData;
     try {
@@ -41,14 +39,13 @@ export const orderService = {
       };
 
       const recovered = await verifyEIP712Signature(typedData, signature);
-      if (!recovered || recovered !== user.toLowerCase())
-        throw new Error("Invalid EIP-712 signature or signer mismatch");
+      if (!recovered || recovered !== user.toLowerCase()) throw new Error("Invalid signature");
 
       const contract = getContractWithSigner(CHAIN_ID, CONTRACT_NAME, LimitOrderABI);
       const tx = await contract.createOrder(tokenIn, tokenOut, amountIn, amountIn, targetPrice, deadline);
       const receipt = await tx.wait();
 
-      logBlockchainTransaction(CHAIN_ID, receipt.hash, "SUCCESS", receipt.gasUsed?.toString());
+      logBlockchainTransaction(CHAIN_ID, receipt.hash, "SUCCESS");
 
       const newOrder = await Order.create({
         user,
@@ -69,94 +66,151 @@ export const orderService = {
     }
   },
 
-  async validateSignature(payload) {
+  // =====================================================
+  // 2️⃣ VALIDATE SIGNATURE
+  // =====================================================
+  async validateSignature(orderData) {
+    const { user, tokenIn, tokenOut, amountIn, targetPrice, deadline, signature } = orderData;
     try {
-      const { typedData, signature } = payload;
+      const typedData = {
+        domain: {
+          name: "LimitOrder",
+          version: "1",
+          chainId: CHAIN_ID,
+          verifyingContract: process.env.LIMIT_ORDER_ADDRESS_SEPOLIA,
+        },
+        types: {
+          Order: [
+            { name: "tokenIn", type: "address" },
+            { name: "tokenOut", type: "address" },
+            { name: "amountIn", type: "uint256" },
+            { name: "targetPrice", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+          ],
+        },
+        message: { tokenIn, tokenOut, amountIn, targetPrice, deadline },
+      };
+
       const recovered = await verifyEIP712Signature(typedData, signature);
-      if (!recovered) throw new Error("Invalid signature");
-      return formatResponse(true, { recovered });
+      if (!recovered) return formatResponse(false, null, "Failed to recover signer");
+
+      const isValid = recovered.toLowerCase() === user.toLowerCase();
+      return formatResponse(isValid, { recovered }, isValid ? "Signature is valid" : "Invalid signature");
     } catch (err) {
+      logger.error("Validate signature failed", { error: err.message });
       return formatResponse(false, err.message);
     }
   },
 
+  // =====================================================
+  // 3️⃣ GET ALL ORDERS
+  // =====================================================
   async getOrders(query) {
-    const { user, status, page = 1, limit = 20 } = query;
     try {
-      const skip = (page - 1) * limit;
       const filter = {};
-      if (user) filter.user = user.toLowerCase();
-      if (status) filter.status = status.toUpperCase();
+      if (query.user) filter.user = query.user.toLowerCase();
+      if (query.status) filter.status = query.status.toUpperCase();
+      if (query.chainId) filter.chainId = Number(query.chainId);
 
-      const total = await Order.countDocuments(filter);
-      const orders = await Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit));
-      return formatResponse(true, { total, page, limit, orders });
+      const orders = await Order.find(filter).sort({ createdAt: -1 });
+      logDatabaseQuery("orders", "find", filter);
+      return formatResponse(true, orders, "Orders fetched successfully");
     } catch (err) {
+      logger.error("Get orders failed", { error: err.message });
       return formatResponse(false, err.message);
     }
   },
 
+  // =====================================================
+  // 4️⃣ GET ORDER BY ID
+  // =====================================================
   async getOrderById(id) {
     try {
       const order = await Order.findById(id);
-      if (!order) throw new Error("Order not found");
-      return formatResponse(true, order);
+      if (!order) return formatResponse(false, null, "Order not found");
+
+      logDatabaseQuery("orders", "findById", { id });
+      return formatResponse(true, order, "Order fetched successfully");
     } catch (err) {
+      logger.error("Get order by id failed", { error: err.message });
       return formatResponse(false, err.message);
     }
   },
 
+  // =====================================================
+  // 5️⃣ UPDATE ORDER
+  // =====================================================
   async updateOrder(id, updates) {
     try {
-      const order = await Order.findById(id);
-      if (!order) throw new Error("Order not found");
-      if (order.status !== "OPEN") throw new Error("Cannot update non-OPEN order");
-      Object.assign(order, updates);
-      await order.save();
-      return formatResponse(true, order, "Order updated");
+      const order = await Order.findByIdAndUpdate(id, updates, { new: true });
+      if (!order) return formatResponse(false, null, "Order not found");
+
+      logDatabaseQuery("orders", "update", { id, updates });
+      return formatResponse(true, order, "Order updated successfully");
     } catch (err) {
+      logger.error("Update order failed", { error: err.message });
       return formatResponse(false, err.message);
     }
   },
 
-  async cancelOrder(id, user) {
+  // =====================================================
+  // 6️⃣ CANCEL ORDER
+  // =====================================================
+  async cancelOrder(id, address) {
     try {
       const order = await Order.findById(id);
-      if (!order) throw new Error("Order not found");
-      if (order.user !== user.toLowerCase()) throw new Error("Not order owner");
-      if (order.status !== "OPEN") throw new Error("Order not OPEN");
+      if (!order) return formatResponse(false, null, "Order not found");
+      if (order.status !== "OPEN") return formatResponse(false, null, "Order cannot be cancelled");
+      if (order.user.toLowerCase() !== address.toLowerCase()) return formatResponse(false, null, "Unauthorized");
 
-      const contract = getContractWithSigner(CHAIN_ID, CONTRACT_NAME, LimitOrderABI);
-      const tx = await contract.cancelOrder(id);
-      const receipt = await tx.wait();
+      order.status = "CANCELLED";
+      order.cancelledAt = new Date();
+      await order.save();
 
-      await order.cancel();
-      logBlockchainTransaction(CHAIN_ID, receipt.hash, "CANCELLED");
-      return formatResponse(true, { txHash: receipt.hash, order }, "Order cancelled");
+      logDatabaseQuery("orders", "cancel", { id, address });
+      return formatResponse(true, order, "Order cancelled successfully");
     } catch (err) {
+      logger.error("Cancel order failed", { error: err.message });
       return formatResponse(false, err.message);
     }
   },
 
+  // =====================================================
+  // 7️⃣ EXPIRE ORDER
+  // =====================================================
   async expireOrder(id) {
     try {
       const order = await Order.findById(id);
-      if (!order) throw new Error("Order not found");
-      if (order.status !== "OPEN") throw new Error("Order not OPEN");
-      await order.expire();
-      return formatResponse(true, order, "Order marked as expired");
+      if (!order) return formatResponse(false, null, "Order not found");
+      if (order.status !== "OPEN") return formatResponse(false, null, "Order cannot be expired");
+
+      order.status = "EXPIRED";
+      order.expiresAt = new Date();
+      await order.save();
+
+      logDatabaseQuery("orders", "expire", { id });
+      return formatResponse(true, order, "Order expired successfully");
     } catch (err) {
+      logger.error("Expire order failed", { error: err.message });
       return formatResponse(false, err.message);
     }
   },
 
+  // =====================================================
+  // 8️⃣ DELETE ORDER
+  // =====================================================
   async deleteOrder(id) {
     try {
-      const result = await Order.findByIdAndDelete(id);
-      if (!result) throw new Error("Order not found or already deleted");
-      return formatResponse(true, result, "Order deleted");
+      const order = await Order.findByIdAndDelete(id);
+      if (!order) return formatResponse(false, null, "Order not found");
+
+      logDatabaseQuery("orders", "delete", { id });
+      return formatResponse(true, order, "Order deleted successfully");
     } catch (err) {
+      logger.error("Delete order failed", { error: err.message });
       return formatResponse(false, err.message);
     }
   },
 };
+
+module.exports = { orderService };

@@ -1,13 +1,13 @@
 /**
- * MongoDB Connection (ESM)
- * Compatible with "type": "module"
+ * MongoDB Connection (CommonJS)
+ * Compatible with Node.js without "type": "module"
  */
 
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 const mongoURI = process.env.MONGO_URI || "mongodb://localhost:27017/evm-multichain-wallet";
 
-export async function connectDB() {
+async function connectDB() {
   try {
     const conn = await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
@@ -35,4 +35,4 @@ export async function connectDB() {
   }
 }
 
-export default connectDB;
+module.exports = connectDB;

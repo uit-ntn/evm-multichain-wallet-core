@@ -1,37 +1,45 @@
 /**
- * Blockchain Adapter (ESM)
+ * Blockchain Adapter (CommonJS)
  * Handles blockchain interactions and provider caching
  */
 
-import { ethers } from "ethers";
-import { config, getEnabledChains, getChainById } from "./config.adapter.js";
-import { logger, logBlockchainTransaction } from "./logger.adapter.js";
+const { ethers } = require("ethers");
+const { config, getEnabledChains, getChainById } = require("./config.adapter");
+const { logger, logBlockchainTransaction } = require("./logger.adapter");
 
 const providerCache = new Map();
 const contractCache = new Map();
 
-export function getProvider(chainId) {
+function getProvider(chainId) {
   if (providerCache.has(chainId)) return providerCache.get(chainId);
-  const chain = getChainById(chainId);
-  if (!chain?.rpc) throw new Error(`RPC for chain ${chainId} not configured`);
 
-  const provider = new ethers.JsonRpcProvider(chain.rpc, { chainId, name: chain.name });
+  const chain = getChainById(chainId);
+  if (!chain || !chain.rpc) {
+    throw new Error(`RPC for chain ${chainId} not configured`);
+  }
+
+  // ✅ ethers v5 dùng ethers.providers.JsonRpcProvider
+  const provider = new ethers.providers.JsonRpcProvider(chain.rpc, {
+    chainId,
+    name: chain.name,
+  });
+
   providerCache.set(chainId, provider);
   return provider;
 }
 
-export function getSigner(chainId) {
+function getSigner(chainId) {
   if (!config.privateKey) throw new Error("PRIVATE_KEY not set");
   const provider = getProvider(chainId);
   return new ethers.Wallet(config.privateKey, provider);
 }
 
-export function getContract(chainId, contractName, abi) {
+function getContract(chainId, contractName, abi) {
   const key = `${chainId}-${contractName}`;
   if (contractCache.has(key)) return contractCache.get(key);
 
   const chainName = chainId === 11155111 ? "sepolia" : "polygon";
-  const address = config.contracts[chainName]?.[contractName];
+  const address = config.contracts?.[chainName]?.[contractName];
   if (!address) throw new Error(`Contract ${contractName} missing for chain ${chainId}`);
 
   const contract = new ethers.Contract(address, abi, getProvider(chainId));
@@ -39,11 +47,13 @@ export function getContract(chainId, contractName, abi) {
   return contract;
 }
 
-export function getContractWithSigner(chainId, contractName, abi) {
-  return getContract(chainId, contractName, abi).connect(getSigner(chainId));
+function getContractWithSigner(chainId, contractName, abi) {
+  const contract = getContract(chainId, contractName, abi);
+  const signer = getSigner(chainId);
+  return contract.connect(signer);
 }
 
-export async function waitForTransaction(chainId, txHash, confirmations = 1) {
+async function waitForTransaction(chainId, txHash, confirmations = 1) {
   const provider = getProvider(chainId);
   const receipt = await provider.waitForTransaction(txHash, confirmations);
   const status = receipt.status === 1 ? "SUCCESS" : "FAILED";
@@ -51,8 +61,17 @@ export async function waitForTransaction(chainId, txHash, confirmations = 1) {
   return receipt;
 }
 
-export function clearCache() {
+function clearCache() {
   providerCache.clear();
   contractCache.clear();
   logger.info("Blockchain caches cleared");
 }
+
+module.exports = {
+  getProvider,
+  getSigner,
+  getContract,
+  getContractWithSigner,
+  waitForTransaction,
+  clearCache,
+};

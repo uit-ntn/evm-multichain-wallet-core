@@ -1,9 +1,9 @@
 /**
- * Config Adapter (ESM)
+ * Config Adapter (CommonJS)
  * Centralized configuration management with environment validation
  */
 
-import dotenv from "dotenv";
+const dotenv = require("dotenv");
 dotenv.config();
 
 /** Helpers */
@@ -12,9 +12,11 @@ function getRequired(key) {
   if (!value) throw new Error(`❌ Required environment variable ${key} is not set`);
   return value;
 }
+
 function getOptional(key, defaultValue) {
   return process.env[key] || defaultValue;
 }
+
 function getInt(key, defaultValue) {
   const v = process.env[key];
   if (!v) return defaultValue;
@@ -22,6 +24,7 @@ function getInt(key, defaultValue) {
   if (isNaN(parsed)) throw new Error(`❌ ${key} must be integer`);
   return parsed;
 }
+
 function getBool(key, defaultValue = false) {
   const v = process.env[key];
   if (!v) return defaultValue;
@@ -29,7 +32,7 @@ function getBool(key, defaultValue = false) {
 }
 
 /** Config object */
-export const config = {
+const config = {
   nodeEnv: getOptional("NODE_ENV", "development"),
   port: getInt("PORT", 4000),
   mongoUri: getOptional("MONGO_URI", "mongodb://localhost:27017/evm-wallet"),
@@ -88,27 +91,32 @@ export const config = {
 };
 
 /** Validation & helpers */
-export function getEnabledChains() {
+function getEnabledChains() {
   return Object.values(config.chains).filter((c) => c.rpc && c.rpc.length > 0);
 }
-export function getChainById(id) {
+
+function getChainById(id) {
   return Object.values(config.chains).find((c) => c.chainId === id);
 }
-export function getChainByName(name) {
+
+function getChainByName(name) {
   return Object.values(config.chains).find(
     (c) => c.name.toLowerCase() === name.toLowerCase()
   );
 }
-export function getContractAddress(chainName, contractName) {
+
+function getContractAddress(chainName, contractName) {
   const chain = config.contracts[chainName];
   return chain ? chain[contractName] : null;
 }
 
 /** Initialize and log configuration */
-export function initConfig() {
+function initConfig() {
   const enabledChains = getEnabledChains();
   console.log(`✅ Configuration loaded successfully`);
-  console.log(`📡 Enabled chains: ${enabledChains.map((c) => c.name).join(", ") || "None"}`);
+  console.log(
+    `📡 Enabled chains: ${enabledChains.map((c) => c.name).join(", ") || "None"}`
+  );
   console.log(`🚀 Environment: ${config.nodeEnv}`);
   console.log(
     `🔧 Features: ${
@@ -120,3 +128,13 @@ export function initConfig() {
   );
   return config;
 }
+
+/** Exports */
+module.exports = {
+  config,
+  getEnabledChains,
+  getChainById,
+  getChainByName,
+  getContractAddress,
+  initConfig,
+};

@@ -1,19 +1,19 @@
 /**
- * Error Handler Middleware (ESM)
+ * Error Handler Middleware (CommonJS)
  * Xử lý lỗi tập trung cho toàn bộ ứng dụng
  */
 
-import { logger } from "../adapters/logger.adapter.js";
+const { logger } = require("../adapters/logger.adapter");
 
 // 404 Not Found handler
-export const notFound = (req, res, next) => {
+function notFound(req, res, next) {
   const error = new Error(`Not Found - ${req.originalUrl}`);
   error.status = 404;
   next(error);
-};
+}
 
 // Global error handler
-export const errorHandler = (err, req, res, next) => {
+function errorHandler(err, req, res, next) {
   let error = { ...err };
   error.message = err.message;
 
@@ -67,4 +67,9 @@ export const errorHandler = (err, req, res, next) => {
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
     requestId: req.id,
   });
+}
+
+module.exports = {
+  notFound,
+  errorHandler,
 };

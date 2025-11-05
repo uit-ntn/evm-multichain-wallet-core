@@ -1,13 +1,13 @@
 /**
- * Rate Limiter Middleware (ESM)
+ * Rate Limiter Middleware (CommonJS)
  * Giới hạn số lượng requests từ một IP trong khoảng thời gian nhất định
  */
 
-import rateLimit from "express-rate-limit";
-import { config } from "../adapters/config.adapter.js";
+const rateLimit = require("express-rate-limit");
+const { config } = require("../adapters/config.adapter");
 
 // Default rate limiter - áp dụng cho tất cả requests
-export const defaultRateLimit = rateLimit({
+const defaultRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 phút
   max: config.rateLimit?.max || 60,
   message: {
@@ -25,7 +25,7 @@ export const defaultRateLimit = rateLimit({
 });
 
 // Strict rate limiter cho auth endpoints
-export const authRateLimit = rateLimit({
+const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 phút
   max: 5, // Chỉ 5 attempts trong 15 phút
   message: {
@@ -42,7 +42,7 @@ export const authRateLimit = rateLimit({
 });
 
 // API rate limiter cho các endpoints quan trọng
-export const apiRateLimit = rateLimit({
+const apiRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 phút
   max: 30,
   message: {
@@ -56,3 +56,9 @@ export const apiRateLimit = rateLimit({
     });
   },
 });
+
+module.exports = {
+  defaultRateLimit,
+  authRateLimit,
+  apiRateLimit,
+};
