@@ -18,11 +18,11 @@ const { errorHandler, notFound } = require('./middlewares/errorHandler');
 const connectDB = require('./config/DBConfig');
 
 // Import routes
-// const authRoutes = require('./routes/auth.route');
+const authRoutes = require('./routes/auth.route');
 const userRoutes = require('./routes/user.route');
 // const orderRoutes = require('./routes/order.route');
 // const transactionRoutes = require('./routes/transaction.route');
-// const receiptRoutes = require('./routes/receipt.route');
+const receiptRoutes = require('./routes/receipt.route');
 // const settingRoutes = require('./routes/setting.route');
 // const evmRoutes = require('./routes/evm.route');
 // const suiRoutes = require('./routes/sui.route');
@@ -74,11 +74,11 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-// app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 // app.use('/api/orders', orderRoutes);
 // app.use('/api/transactions', transactionRoutes);
-// app.use('/api/receipts', receiptRoutes);
+app.use('/api/receipts', receiptRoutes);
 // app.use('/api/settings', settingRoutes);
 // app.use('/api/evm', evmRoutes);
 // app.use('/api/sui', suiRoutes);
