@@ -4,6 +4,7 @@
  */
 
 const { uploadToIPFS } = require("../services/receipt.service");
+const { generateAndUploadReceipt } = require("../services/receipt.service");
 const { logger } = require("../adapters/logger.adapter");
 const jwt = require("jsonwebtoken");
 const { jwt: jwtConfig } = require("../config");
@@ -71,4 +72,36 @@ const uploadReceipts = async (req, res) => {
   }
 };
 
-module.exports = { uploadReceipts };
+/**
+ * Sinh PDF + JSON → upload lên IPFS + lưu vào DB
+ */
+const generateReceipt = async (req, res) => {
+  try {
+    // 🧩 Xác thực JWT
+    const authHeader = req.headers["authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Missing JWT token" });
+    }
+    const token = authHeader.split(" ")[1];
+    let payload;
+    try {
+      payload = jwt.verify(token, jwtConfig.secret);
+    } catch (err) {
+      return res.status(401).json({ error: "Invalid JWT" });
+    }
+
+    // 🧩 Lấy dữ liệu request
+    const { txHash, owner, meta } = req.body;
+    if (!txHash || !owner || !meta) {
+      return res.status(400).json({ error: "Missing txHash, owner, or meta" });
+    }
+
+    const result = await generateAndUploadReceipt({ txHash, owner, meta });
+    return res.status(201).json(result);
+  } catch (error) {
+    logger.error("Error generating receipt", { error: error.message });
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+module.exports = { uploadReceipts, generateReceipt };
