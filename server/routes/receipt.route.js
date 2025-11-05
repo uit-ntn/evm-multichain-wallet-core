@@ -6,7 +6,7 @@
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
-const { uploadReceipts, generateReceipt } = require("../controllers/receiptController");
+const { uploadReceipts, generateReceipt, verifyReceipt } = require("../controllers/receiptController");
 const { defaultRateLimit } = require("../middlewares/rateLimiter");
 
 const router = express.Router();
@@ -22,5 +22,8 @@ router.post("/", defaultRateLimit, upload.array("files", 2), uploadReceipts);
 
 // POST /api/receipts/generate
 router.post("/generate", defaultRateLimit, generateReceipt);
+
+// GET /api/receipts/verify/:txHash
+router.get("/verify/:txHash", defaultRateLimit, verifyReceipt);
 
 module.exports = router;

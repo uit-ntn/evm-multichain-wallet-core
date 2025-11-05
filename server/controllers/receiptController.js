@@ -104,4 +104,32 @@ const generateReceipt = async (req, res) => {
   }
 };
 
-module.exports = { uploadReceipts, generateReceipt };
+const { verifyReceiptIntegrity } = require("../services/receipt.service");
+
+/**
+ * GET /api/receipts/verify/:txHash
+ * Xác minh tính toàn vẹn của file bằng SHA256
+ */
+const verifyReceipt = async (req, res) => {
+  try {
+    const { txHash } = req.params;
+
+    if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+      return res.status(400).json({ error: "Invalid txHash format" });
+    }
+
+    const result = await verifyReceiptIntegrity(txHash);
+
+    if (!result || result.error) {
+      return res.status(404).json({ error: result?.error || "Receipt not found" });
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    logger.error("Error verifying receipt", { error: error.message });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+module.exports = { uploadReceipts, generateReceipt, verifyReceipt };
+

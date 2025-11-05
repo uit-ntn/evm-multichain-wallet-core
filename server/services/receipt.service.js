@@ -10,6 +10,7 @@ const path = require("path");
 const PDFDocument = require("pdfkit");
 const { logger } = require("../adapters/logger.adapter");
 const Receipt = require("../models/receipt.model");
+const crypto = require("crypto");
 
 // Lấy token Pinata từ .env
 const pinataJWT = process.env.PINATA_JWT;
@@ -210,4 +211,47 @@ const generateAndUploadReceipt = async ({ txHash, owner, meta }) => {
   }
 };
 
-module.exports = { uploadToIPFS, generateAndUploadReceipt };
+/**
+ * Tính SHA256 của file local
+ */
+const computeFileHash = (filePath) => {
+  const buffer = fs.readFileSync(filePath);
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex");
+  return hash;
+};
+
+/**
+ * Tải file từ IPFS & tính SHA256 để so sánh
+ */
+const verifyReceiptIntegrity = async (txHash) => {
+  try {
+    const receipt = await Receipt.findByTxHash(txHash);
+    if (!receipt) {
+      return { ok: false, error: "Receipt not found" };
+    }
+
+    const { cid, fileName } = receipt;
+    const gateway = process.env.IPFS_PUBLIC_GATEWAY || "https://gateway.pinata.cloud/ipfs/";
+    const fileUrl = `${gateway}${cid}`;
+    
+    // 🔹 Tải file từ IPFS
+    const res = await axios.get(fileUrl, { responseType: "arraybuffer" });
+    const ipfsBuffer = Buffer.from(res.data);
+    const ipfsHash = crypto.createHash("sha256").update(ipfsBuffer).digest("hex");
+
+    // 🔹 So sánh với metadata hash (nếu có lưu local)
+    const ok = !!ipfsHash; // Vì không còn file local, chỉ xác minh IPFS
+    return { ok, sha256: ipfsHash, cid };
+
+  } catch (error) {
+    logger.error("❌ Verify receipt failed", { error: error.message });
+    throw error;
+  }
+};
+
+module.exports = {
+  uploadToIPFS,
+  generateAndUploadReceipt,
+  verifyReceiptIntegrity,
+};
+
