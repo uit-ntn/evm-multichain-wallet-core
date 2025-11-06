@@ -20,6 +20,9 @@ const IPFS_PUBLIC_GATEWAY =
   process.env.IPFS_PUBLIC_GATEWAY || "https://gateway.pinata.cloud/ipfs/";
 const PIN_PROVIDER = "pinata"; // dùng để trả về thông tin nhà cung cấp pin
 
+// Chế độ xoá: 'unpin' (khuyến nghị) | 'delete' (xoá DB)
+const RECEIPT_DELETE_MODE = (process.env.RECEIPT_DELETE_MODE || "unpin").toLowerCase();
+
 // ==== Helpers ====
 const isValidTxHash = (tx) => /^0x[a-fA-F0-9]{64}$/.test(tx);
 const isEthAddr = (a) => /^0x[a-fA-F0-9]{40}$/.test(a);
@@ -420,6 +423,98 @@ const repinByTxHash = async (txHash, { actor = "unknown", role = "unknown" } = {
   }
 };
 
+/* =========================
+ * ✅ NEW (Yêu cầu 7): Gỡ biên lai theo txHash (Admin)
+ * - Unpin trên Pinata (không ném lỗi nếu 404 pin not found)
+ * - Nếu RECEIPT_DELETE_MODE = 'delete' → xoá DB
+ * - Ngược lại → giữ record, đánh dấu status = FAILED + metadata.adminRemoved
+ * =========================
+ */
+
+/** Unpin Pinata, không throw nếu 404 (pin không tồn tại) */
+const tryUnpinOnPinata = async (cid) => {
+  try {
+    await axios.delete(`https://api.pinata.cloud/pinning/unpin/${cid}`, {
+      headers: { Authorization: `Bearer ${pinataJWT}` },
+      timeout: 20_000,
+    });
+    return { ok: true };
+  } catch (err) {
+    const status = err?.response?.status;
+    if (status === 404) return { ok: true, note: "pin_not_found" }; // coi như hợp lệ
+    return {
+      ok: false,
+      status,
+      reason: "pinata_unpin_failed",
+      detail: err?.response?.data || err.message,
+    };
+  }
+};
+
+/** Gỡ biên lai theo txHash: unpin + delete/flag DB */
+const removeReceiptByTxHash = async (txHash, { actor = "unknown", role = "unknown" } = {}) => {
+  if (!isValidTxHash(txHash)) {
+    const err = new Error("Invalid txHash format");
+    err.code = "BAD_REQUEST";
+    throw err;
+  }
+
+  const tx = txHash.toLowerCase();
+  const record = await Receipt.findByTxHash(tx);
+  if (!record) {
+    return { code: "NOT_FOUND" };
+  }
+
+  // 1) Unpin trên Pinata (nếu provider hỗ trợ)
+  let unpinNote = "unpin_skipped";
+  if (PIN_PROVIDER === "pinata") {
+    const unpin = await tryUnpinOnPinata(record.cid);
+    if (!unpin.ok) {
+      const msg = `[Receipt] Unpin failed: ${record.cid} – ${unpin.reason} ${unpin.status || ""}`;
+      logger?.warn ? logger.warn(msg, unpin.detail || "") : console.warn(msg, unpin.detail || "");
+      unpinNote = "unpin_failed_pinata";
+    } else {
+      unpinNote = unpin.note === "pin_not_found" ? "pin_not_found" : "unpinned";
+    }
+  }
+
+  // 2) Xử lý DB theo chế độ
+  let note = "";
+  if (RECEIPT_DELETE_MODE === "delete") {
+    await Receipt.deleteOne({ _id: record._id });
+    note = `${unpinNote}; db_deleted`;
+  } else {
+    record.status = "FAILED";
+    record.metadata = {
+      ...(record.metadata || {}),
+      adminRemoved: true,
+      removedAt: new Date().toISOString(),
+      removedBy: actor,
+      removedByRole: role,
+    };
+    await record.save();
+    note = `${unpinNote}; db_kept_status_FAILED`;
+  }
+
+  const warning =
+    "Lưu ý: file có thể vẫn truy cập được qua public IPFS gateway nếu đã được các node khác cache/repin.";
+
+  logger.info("Receipt removed", {
+    txHash: tx,
+    mode: RECEIPT_DELETE_MODE,
+    note,
+    actor,
+    role,
+  });
+
+  return {
+    code: "OK",
+    txHash: tx,
+    note,
+    warning,
+  };
+};
+
 module.exports = {
   // public methods
   uploadToIPFS,
@@ -428,7 +523,8 @@ module.exports = {
   findByTxHash,
   listByUser,
   getDownloadUrl,
-  repinByTxHash, // ✅ export mới cho yêu cầu 6
+  repinByTxHash, // ✅ yêu cầu 6
+  removeReceiptByTxHash, // ✅ yêu cầu 7
 
   // for tests
   generateReceiptPDF,

@@ -291,6 +291,48 @@ const refreshReceipt = async (req, res) => {
   }
 };
 
+/**
+ * DELETE /api/receipts/:txHash
+ * Gỡ biên lai (ADMIN). Hành vi:
+ * - Unpin trên pinning provider (nếu cấu hình)
+ * - Tuỳ chế độ: xoá DB hoặc giữ record và gắn cờ (khuyến nghị)
+ * Trả 200 OK (hoặc có thể dùng 204 No Content nếu muốn không trả body)
+ * 403 được chặn bởi middleware requireAdmin; 429 bởi rate limiter ở route.
+ */
+const deleteReceipt = async (req, res) => {
+  try {
+    const { txHash } = req.params;
+
+    if (!isTxHash(txHash)) {
+      return res.status(422).json({ message: "Invalid txHash format" });
+    }
+
+    // Route đã kiểm tra quyền admin. Vẫn log lại actor/role để audit.
+    const actor = req.user?.sub || req.user?.id || "unknown";
+    const role = req.user?.role || "unknown";
+
+    const result = await receiptService.removeReceiptByTxHash(txHash, { actor, role });
+
+    if (result.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Receipt not found" });
+    }
+
+    // Mặc định trả 200 kèm thông tin; nếu muốn 204: res.status(204).end();
+    return res.status(200).json({
+      message: "deleted",
+      txHash: result.txHash,
+      note: result.note,          // ví dụ: "unpinned; db_kept_status_FAILED"
+      warning: result.warning,    // nhắc public gateway còn có thể truy cập CID
+    });
+  } catch (error) {
+    if (error.code === 429 || error.status === 429) {
+      return res.status(429).json({ message: "Too Many Requests" });
+    }
+    logger.error("Error deleteReceipt", { error: error.message });
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   uploadReceipts,
   generateReceipt,
@@ -298,5 +340,6 @@ module.exports = {
   getByTxHash,
   getByUser,
   downloadReceipt,
-  refreshReceipt, // ✅ bổ sung cho yêu cầu 6
+  refreshReceipt, // yêu cầu 6
+  deleteReceipt,  // ✅ yêu cầu 7
 };
