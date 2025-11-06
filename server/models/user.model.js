@@ -6,19 +6,6 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 100
-  },
-  
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  
   address: {
     type: String,
     required: true,
@@ -26,26 +13,48 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     validate: {
       validator: function(v) {
-        // Validate Ethereum address format (0x + 40 hex chars)
         return /^0x[a-fA-F0-9]{40}$/.test(v);
       },
       message: 'Invalid Ethereum address format'
     }
   },
-  
+
+  displayName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+
+  nonce: {
+    type: String,
+    default: ''
+  },
+
   role: {
     type: String,
     enum: ['user', 'admin'],
     default: 'user'
+  },
+
+  stakedAmount: {
+    type: String,
+    default: '0'
+  },
+
+  tier: {
+    type: String,
+    default: 'Bronze'
   }
 }, {
-  timestamps: true, // Tự động tạo createdAt và updatedAt
+  timestamps: true, 
   collection: 'users'
 });
 
 // Indexes
 userSchema.index({ address: 1 }, { unique: true });
 userSchema.index({ role: 1 });
+// Add unique sparse index for displayName to prevent global collisions but allow empty values
+userSchema.index({ displayName: 1 }, { unique: true, sparse: true });
 
 // Methods
 userSchema.methods.toJSON = function() {
