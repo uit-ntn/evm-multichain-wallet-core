@@ -10,15 +10,9 @@ const { jwt: jwtConfig } = require("../config");
 require("dotenv").config();
 
 /* ===== JWT config với fallback an toàn ===== */
-const JWT_SECRET =
-  (jwtConfig && jwtConfig.secret) ||
-  process.env.JWT_SECRET ||
-  "dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
-const JWT_EXPIRES_IN =
-  (jwtConfig && jwtConfig.expiresIn) ||
-  process.env.JWT_EXPIRES_IN ||
-  "7d";
 
 /* ===== Helpers ===== */
 // Sinh nonce ngẫu nhiên (v6 / v5 / fallback crypto)
