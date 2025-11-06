@@ -55,6 +55,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "Bronze",
     },
+
+    // 🟩 Ai là người gần nhất thay đổi role của user này
+    updatedBy: {
+      type: String,
+      default: null,
+      lowercase: true,
+    },
+
+    // 🟩 Thời điểm gần nhất role được thay đổi
+    lastRoleChangeAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -67,7 +80,6 @@ const userSchema = new mongoose.Schema(
 //
 userSchema.index({ address: 1 }, { unique: true });
 userSchema.index({ role: 1 });
-// unique-sparse cho phép trùng giá trị rỗng, nhưng không trùng khi có giá trị thật
 userSchema.index({ displayName: 1 }, { unique: true, sparse: true });
 
 //
@@ -75,7 +87,7 @@ userSchema.index({ displayName: 1 }, { unique: true, sparse: true });
 //
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
-  delete user.password; // (nếu có thêm trường password sau này)
+  delete user.password; // nếu sau này có thêm trường password
   return user;
 };
 

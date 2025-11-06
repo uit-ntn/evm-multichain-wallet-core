@@ -66,4 +66,44 @@ const updateDisplayName = async (req, res) => {
   }
 };
 
-module.exports = { getUser, updateDisplayName };
+/**
+ * PATCH /api/users/role
+ * Đổi vai trò user (ADMIN only)
+ * Auth: JWT REQUIRED (role = admin)
+ */
+const updateUserRole = async (req, res) => {
+  try {
+    const { address, role } = req.body;
+    const requester = req.user; // Lấy thông tin từ token
+
+    // 1️⃣ Kiểm tra đăng nhập
+    if (!requester) {
+      return res.status(401).json({ message: "Missing JWT" });
+    }
+
+    // 2️⃣ Kiểm tra quyền admin
+    if (requester.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden: Admin only" });
+    }
+
+    // 3️⃣ Gọi service để đổi role
+    const result = await userService.updateUserRole(
+      requester.address,
+      address,
+      role
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Update user role error:", error.message);
+
+    if (error.message.includes("Invalid role"))
+      return res.status(400).json({ message: error.message });
+    if (error.message === "User not found")
+      return res.status(404).json({ message: error.message });
+
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+module.exports = { getUser, updateDisplayName, updateUserRole };
