@@ -250,11 +250,53 @@ const downloadReceipt = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/receipts/refresh
+ * Re-pin/refresh trên pinning service (ADMIN/SERVICE)
+ * Body: { txHash }
+ */
+const refreshReceipt = async (req, res) => {
+  try {
+    const { txHash } = req.body || {};
+    if (!txHash || !isTxHash(txHash)) {
+      return res.status(400).json({ message: "Invalid or missing txHash" });
+    }
+
+    // Quyền đã được kiểm tra ở route bằng middleware requireAdminOrService
+    const actor = req.user?.sub || req.user?.id || "unknown";
+    const role = req.user?.role || "unknown";
+
+    const { cid, pinned, pinProvider } = await receiptService.repinByTxHash(txHash, {
+      actor,
+      role,
+    });
+
+    logger.info("Repin done", { txHash, cid, pinned, pinProvider, actor, role });
+
+    return res.status(200).json({
+      message: "repinned",
+      cid,
+      pinned,
+      pinProvider,
+    });
+  } catch (error) {
+    if (error.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Receipt not found" });
+    }
+    if (error.code === 429 || error.status === 429) {
+      return res.status(429).json({ message: "Rate limited by pinning service" });
+    }
+    logger.error("Error refreshReceipt", { error: error.message });
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   uploadReceipts,
   generateReceipt,
   verifyReceipt,
   getByTxHash,
   getByUser,
-  downloadReceipt, // ✅ bổ sung cho yêu cầu 5
+  downloadReceipt,
+  refreshReceipt, // ✅ bổ sung cho yêu cầu 6
 };

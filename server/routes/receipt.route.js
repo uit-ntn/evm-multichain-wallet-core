@@ -15,6 +15,15 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB/file
 });
 
+// ===== Admin/Service guard cho endpoint quản trị =====
+const requireAdminOrService = (req, res, next) => {
+  const role = (req.user?.role || '').toString().toLowerCase();
+  if (!['admin', 'service'].includes(role)) {
+    return res.status(403).json({ message: 'Forbidden: admin/service only' });
+  }
+  return next();
+};
+
 // === Routes ===
 
 // Upload file PDF/JSON lên IPFS (multipart/form-data, field: "files")
@@ -29,6 +38,9 @@ router.get('/verify/:txHash', optionalJwt, receiptController.verifyReceipt);
 // ✅ Danh sách biên lai theo user (JWT) + phân trang
 // GET /api/receipts/user/:address?page=1&pageSize=20
 router.get('/user/:address', authJwt, receiptController.getByUser);
+
+// ✅ Re-pin/refresh (ADMIN/SERVICE) — POST /api/receipts/refresh
+router.post('/refresh', authJwt, requireAdminOrService, receiptController.refreshReceipt);
 
 // ✅ URL tải file (pdf) – 200 {url} hoặc 302 redirect (JWT)
 // GET /api/receipts/:txHash/download?type=pdf&redirect=1

@@ -18,6 +18,7 @@ if (!pinataJWT) throw new Error("Missing PINATA_JWT in environment");
 
 const IPFS_PUBLIC_GATEWAY =
   process.env.IPFS_PUBLIC_GATEWAY || "https://gateway.pinata.cloud/ipfs/";
+const PIN_PROVIDER = "pinata"; // dùng để trả về thông tin nhà cung cấp pin
 
 // ==== Helpers ====
 const isValidTxHash = (tx) => /^0x[a-fA-F0-9]{64}$/.test(tx);
@@ -28,6 +29,23 @@ const ensureTmpDir = () => {
   const tmpDir = path.join(__dirname, "../../uploads");
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   return tmpDir;
+};
+
+/** Tải nội dung CID từ gateway về file tạm (cho fallback khi không dùng được pinByHash) */
+const downloadCidToTemp = async (cid) => {
+  const url = `${IPFS_PUBLIC_GATEWAY}${cid}`;
+  const tmpDir = ensureTmpDir();
+  const tmpFile = path.join(tmpDir, `repin_${cid.slice(0, 20)}.bin`);
+
+  const res = await axios.get(url, { responseType: "stream", timeout: 30_000 });
+  await new Promise((resolve, reject) => {
+    const ws = fs.createWriteStream(tmpFile);
+    res.data.pipe(ws);
+    ws.on("finish", resolve);
+    ws.on("error", reject);
+  });
+
+  return tmpFile;
 };
 
 // ==== Core IPFS ====
@@ -271,14 +289,135 @@ const getDownloadUrl = async (txHash, { type = "pdf" } = {}) => {
   const rec = await Receipt.findByTxHash(txHash);
   if (!rec) return { url: null };
 
-  // Hiện chỉ lưu CID PDF trong record => chỉ hỗ trợ type=pdf
   if (type !== "pdf") {
-    // Nếu sau này lưu thêm jsonCid trong model, map type='json' -> jsonCid ở đây
+    // nếu sau này có jsonCid trong model thì map ở đây
     return { url: null };
   }
 
   const url = `${IPFS_PUBLIC_GATEWAY}${rec.cid}`;
   return { url, fileName: rec.fileName || `receipt_${txHash}.pdf` };
+};
+
+/** ✅ NEW (Yêu cầu 6): Re-pin/refresh CID trên Pinata theo txHash
+ *  - Ưu tiên pinByHash
+ *  - Nếu plan miễn phí trả "PAID_FEATURE_ONLY" → fallback tải lại CID & pinFileToIPFS
+ */
+const repinByTxHash = async (txHash, { actor = "unknown", role = "unknown" } = {}) => {
+  if (!isValidTxHash(txHash)) {
+    const err = new Error("Invalid txHash format");
+    err.code = "BAD_REQUEST";
+    throw err;
+  }
+
+  const receipt = await Receipt.findByTxHash(txHash);
+  if (!receipt) {
+    const err = new Error("Receipt not found");
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+
+  const cid = receipt.cid;
+
+  try {
+    // 1) Thử Pinata: pinByHash (CID)
+    const body = {
+      hashToPin: cid,
+      pinataMetadata: {
+        name: receipt.fileName || `receipt_${txHash}.pdf`,
+        keyvalues: {
+          txHash,
+          owner: receipt.owner,
+          actor,
+          role,
+          source: "repin",
+        },
+      },
+    };
+
+    await axios.post("https://api.pinata.cloud/pinning/pinByHash", body, {
+      headers: {
+        Authorization: `Bearer ${pinataJWT}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 30_000,
+    });
+
+    logger.info("Repin success (pinByHash)", { txHash, cid, actor, role });
+
+    return {
+      cid,
+      pinned: true,
+      pinProvider: PIN_PROVIDER,
+      method: "pinByHash",
+    };
+  } catch (error) {
+    const status = error?.response?.status;
+    const data = error?.response?.data;
+
+    const paidOnly = data?.error?.reason === "PAID_FEATURE_ONLY";
+    const forbidden = status === 401 || status === 403;
+
+    // 2) Nếu bị giới hạn plan → fallback: tải nội dung CID rồi pinFileToIPFS
+    if (status === 403 && paidOnly) {
+      logger.warn("pinByHash not allowed on current plan. Fallback to pinFileToIPFS", {
+        txHash,
+        cid,
+      });
+
+      const tmp = await downloadCidToTemp(cid);
+      try {
+        const up = await uploadToIPFS(tmp, `repin_${cid}.bin`);
+        const same = up.cid === cid;
+
+        logger.info("Repin success (fallback pinFileToIPFS)", {
+          txHash,
+          origCid: cid,
+          newCid: up.cid,
+          same,
+        });
+
+        return {
+          cid: up.cid,
+          pinned: true,
+          pinProvider: `${PIN_PROVIDER} (fallback pinFile)`,
+          method: "pinFileToIPFS",
+          cidUnchanged: same,
+        };
+      } finally {
+        try {
+          if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+        } catch {}
+      }
+    }
+
+    // 3) Bubble các lỗi khác
+    logger.error("Repin failed (Pinata)", {
+      txHash,
+      cid,
+      status,
+      message: error?.message,
+      response: data,
+    });
+
+    if (status === 429) {
+      const e = new Error("Rate limited by pinning service");
+      e.code = "RATE_LIMITED";
+      e.status = 429;
+      e.details = data;
+      throw e;
+    }
+    if (forbidden) {
+      const e = new Error("Forbidden by pinning service");
+      e.code = "FORBIDDEN";
+      e.status = status;
+      e.details = data;
+      throw e;
+    }
+
+    error.status = status || 500;
+    error.details = data;
+    throw error;
+  }
 };
 
 module.exports = {
@@ -288,9 +427,13 @@ module.exports = {
   verifyReceiptIntegrity,
   findByTxHash,
   listByUser,
-  getDownloadUrl,          // ✅ export mới cho yêu cầu 5
+  getDownloadUrl,
+  repinByTxHash, // ✅ export mới cho yêu cầu 6
 
   // for tests
   generateReceiptPDF,
   generateMetadataJSON,
+
+  // optional export nếu muốn test riêng
+  // downloadCidToTemp,
 };
