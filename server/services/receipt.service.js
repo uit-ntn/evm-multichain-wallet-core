@@ -264,13 +264,31 @@ const listByUser = async (ownerAddress, { page = 1, pageSize = 20 } = {}) => {
   return { items, total };
 };
 
+/** ✅ NEW: Build URL tải file theo txHash + type (hiện hỗ trợ pdf) */
+const getDownloadUrl = async (txHash, { type = "pdf" } = {}) => {
+  if (!isValidTxHash(txHash)) throw new Error("Invalid txHash format");
+
+  const rec = await Receipt.findByTxHash(txHash);
+  if (!rec) return { url: null };
+
+  // Hiện chỉ lưu CID PDF trong record => chỉ hỗ trợ type=pdf
+  if (type !== "pdf") {
+    // Nếu sau này lưu thêm jsonCid trong model, map type='json' -> jsonCid ở đây
+    return { url: null };
+  }
+
+  const url = `${IPFS_PUBLIC_GATEWAY}${rec.cid}`;
+  return { url, fileName: rec.fileName || `receipt_${txHash}.pdf` };
+};
+
 module.exports = {
   // public methods
   uploadToIPFS,
   generateAndUploadReceipt,
   verifyReceiptIntegrity,
   findByTxHash,
-  listByUser,              // ✅ export mới
+  listByUser,
+  getDownloadUrl,          // ✅ export mới cho yêu cầu 5
 
   // for tests
   generateReceiptPDF,

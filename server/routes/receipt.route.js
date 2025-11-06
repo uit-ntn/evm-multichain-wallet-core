@@ -11,7 +11,7 @@ const { authJwt, optionalJwt } = require('../middlewares/authMiddleware');
 
 // Multer cho upload file
 const upload = multer({
-  dest: 'uploads/',                     // thư mục tạm (project root)
+  dest: 'uploads/',                      // thư mục tạm (project root)
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB/file
 });
 
@@ -30,7 +30,11 @@ router.get('/verify/:txHash', optionalJwt, receiptController.verifyReceipt);
 // GET /api/receipts/user/:address?page=1&pageSize=20
 router.get('/user/:address', authJwt, receiptController.getByUser);
 
-// Lấy receipt theo txHash (JWT) – đặt CUỐI cùng để không “ăn” route /user/:address
+// ✅ URL tải file (pdf) – 200 {url} hoặc 302 redirect (JWT)
+// GET /api/receipts/:txHash/download?type=pdf&redirect=1
+router.get('/:txHash/download', authJwt, receiptController.downloadReceipt);
+
+// Lấy receipt theo txHash (JWT) – đặt CUỐI để không “ăn” route /user/:address và /:txHash/download
 router.get('/:txHash', authJwt, receiptController.getByTxHash);
 
 module.exports = router;

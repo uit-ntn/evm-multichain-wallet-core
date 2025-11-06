@@ -1,4 +1,4 @@
-/**
+/** 
  * Receipt Controller
  * Xử lý các HTTP request liên quan đến biên lai (PDF/JSON → IPFS)
  */
@@ -216,10 +216,45 @@ const getByUser = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/receipts/:txHash/download?type=pdf&redirect=1
+ * Trả URL tải file (200 JSON) hoặc 302 redirect tới gateway IPFS
+ */
+const downloadReceipt = async (req, res) => {
+  try {
+    const { txHash } = req.params;
+    const type = String(req.query.type || "pdf").toLowerCase();
+    const doRedirect = String(req.query.redirect || "0") === "1";
+
+    if (!isTxHash(txHash)) {
+      return res.status(400).json({ message: "Invalid txHash format" });
+    }
+    if (!["pdf"].includes(type)) {
+      // Hiện tại model chỉ lưu CID của PDF; mở rộng sau nếu lưu CID JSON
+      return res.status(400).json({ message: "Invalid type (supported: pdf)" });
+    }
+
+    const { url, fileName } = await receiptService.getDownloadUrl(txHash, { type });
+    if (!url) {
+      return res.status(404).json({ message: "Receipt file not found" });
+    }
+
+    if (doRedirect) {
+      return res.redirect(302, url);
+    }
+
+    return res.status(200).json({ url, fileName });
+  } catch (error) {
+    logger.error("Error downloadReceipt", { error: error.message });
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   uploadReceipts,
   generateReceipt,
   verifyReceipt,
   getByTxHash,
-  getByUser, 
+  getByUser,
+  downloadReceipt, // ✅ bổ sung cho yêu cầu 5
 };
