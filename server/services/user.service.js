@@ -2,20 +2,25 @@
  * User Service
  * Business logic cho user management
  */
+// services/user.service.js
+const User = require("../models/user.model");
 
-const User = require('../models/user.model');
-const { logger } = require('../adapters/logger.adapter');
+/**
+ * Tìm user theo địa chỉ ví
+ * @param {string} address
+ * @returns {object|null}
+ */
+async function getUserByAddress(address) {
+  const normalized = address.toLowerCase();
+  const user = await User.findOne({ address: normalized }).lean();
 
-const getAllUsers = async () => {
-  try {
-    const users = await User.find({}).select('-password');
-    return users;
-  } catch (error) {
-    logger.error('Error getting all users', { error: error.message });
-    throw error;
-  }
-};
+  if (!user) return null;
 
-module.exports = {
-  getAllUsers,
-};
+  return {
+    address: user.address,
+    displayName: user.displayName,
+    role: user.role,
+  };
+}
+
+module.exports = { getUserByAddress };

@@ -3,53 +3,33 @@
  * Xử lý các HTTP requests liên quan đến user
  */
 
-const userService = require('../services/user.service');
-const { logger } = require('../adapters/logger.adapter');
+// controllers/user.controller.js
+const userService = require("../services/user.service");
 
-const getAllUsers = async (req, res) => {
+/**
+ * GET /api/users/:address
+ * Lấy chi tiết user theo địa chỉ ví
+ */
+const getUser = async (req, res) => {
   try {
-    // 401 Unauthorized – thiếu JWT
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    const { address } = req.params;
+
+    // Kiểm tra định dạng địa chỉ ví
+    const addrRegex = /^0x[a-fA-F0-9]{40}$/;
+    if (!addrRegex.test(address)) {
+      return res.status(400).json({ message: "Invalid address format" });
     }
 
-    // 403 Forbidden – không phải admin
-    if (!req.user.isAdmin) {
-      return res.status(403).json({ error: 'Forbidden: Admin access required' });
+    const user = await userService.getUserByAddress(address);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // Phân trang (pagination)
-    let { page = 1, limit = 20 } = req.query;
-    page = parseInt(page, 10);
-    limit = parseInt(limit, 10);
-
-    // 400 Bad Request – tham số phân trang sai
-    if (
-      isNaN(page) || isNaN(limit) ||
-      page < 1 || limit < 1 ||
-      !Number.isInteger(page) || !Number.isInteger(limit) ||
-      limit > 100
-    ) {
-      return res.status(400).json({ error: 'Bad Request: Invalid pagination parameters' });
-    }
-
-    // 429 Too Many Requests – Giả lập, trong thực tế sẽ dùng middleware rate limit, ở đây demo:
-    if (req.tooManyRequests) {
-      return res.status(429).json({ error: 'Too Many Requests: Rate limit exceeded' });
-    }
-
-    // Lấy dữ liệu người dùng với phân trang
-    const users = await userService.getAllUsers({ page, limit }); // cần sửa service nếu chưa có hỗ trợ phân trang
-
-    // 200 OK – Trả danh sách
-    return res.status(200).json(users);
+    return res.status(200).json(user);
   } catch (error) {
-    logger.error('Error getting all users', { error: error.message });
-    // 500 Internal Server Error
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("User get error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
-module.exports = {
-  getAllUsers,
-};
+module.exports = { getUser };
