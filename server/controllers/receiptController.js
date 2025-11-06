@@ -8,6 +8,10 @@ const { jwt: jwtConfig } = require("../config");
 const { logger } = require("../adapters/logger.adapter");
 const receiptService = require("../services/receipt.service");
 
+// ===== Helpers validate =====
+const isTxHash = (h) => /^0x[a-fA-F0-9]{64}$/.test(h || "");
+const isEthAddr = (a) => /^0x[a-fA-F0-9]{40}$/.test(a || "");
+
 /**
  * POST /api/receipts
  * Upload biên lai (PDF/JSON) lên IPFS (multipart/form-data)
@@ -36,6 +40,12 @@ const uploadReceipts = async (req, res) => {
     }
     if (!txHash || !owner) {
       return res.status(400).json({ error: "Missing txHash or owner" });
+    }
+    if (!isTxHash(txHash)) {
+      return res.status(422).json({ error: "Invalid txHash format" });
+    }
+    if (!isEthAddr(owner)) {
+      return res.status(422).json({ error: "Invalid owner address format" });
     }
 
     // 🧩 3. Kiểm tra định dạng file
@@ -67,7 +77,7 @@ const uploadReceipts = async (req, res) => {
   } catch (error) {
     logger.error("Error uploading receipts", { error: error.message });
 
-    if (error.message.includes("File too large")) {
+    if (error.message?.includes("File too large")) {
       return res.status(413).json({ error: "Payload Too Large" });
     }
 
@@ -101,6 +111,12 @@ const generateReceipt = async (req, res) => {
         .status(400)
         .json({ error: "Missing txHash, owner, or metadata" });
     }
+    if (!isTxHash(txHash)) {
+      return res.status(422).json({ error: "Invalid txHash format" });
+    }
+    if (!isEthAddr(owner)) {
+      return res.status(422).json({ error: "Invalid owner address format" });
+    }
 
     const result = await receiptService.generateAndUploadReceipt({
       txHash,
@@ -123,7 +139,7 @@ const verifyReceipt = async (req, res) => {
   try {
     const { txHash } = req.params;
 
-    if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+    if (!isTxHash(txHash)) {
       return res.status(400).json({ error: "Invalid txHash format" });
     }
 
@@ -150,7 +166,7 @@ const getByTxHash = async (req, res) => {
   try {
     const { txHash } = req.params;
 
-    if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+    if (!isTxHash(txHash)) {
       return res.status(422).json({ message: "Invalid txHash format" });
     }
 
@@ -167,9 +183,43 @@ const getByTxHash = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/receipts/user/:address?page=1&pageSize=20
+ * Danh sách biên lai theo user (JWT) – Pagination & sort createdAt desc
+ */
+const getByUser = async (req, res) => {
+  try {
+    const { address } = req.params;
+    const page = Number(req.query.page ?? 1);
+    const pageSize = Number(req.query.pageSize ?? 20);
+
+    if (!isEthAddr(address)) {
+      return res.status(400).json({ message: "Invalid address format" });
+    }
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      return res
+        .status(400)
+        .json({ message: "Invalid pagination params (page>=1, 1<=pageSize<=100)" });
+    }
+
+    const result = await receiptService.listByUser(address, { page, pageSize });
+
+    return res.status(200).json({
+      items: result.items,
+      total: result.total,
+      page,
+      pageSize,
+    });
+  } catch (error) {
+    logger.error("Error getByUser receipts", { error: error.message });
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   uploadReceipts,
   generateReceipt,
   verifyReceipt,
   getByTxHash,
+  getByUser, 
 };

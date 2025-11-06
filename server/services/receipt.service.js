@@ -21,6 +21,7 @@ const IPFS_PUBLIC_GATEWAY =
 
 // ==== Helpers ====
 const isValidTxHash = (tx) => /^0x[a-fA-F0-9]{64}$/.test(tx);
+const isEthAddr = (a) => /^0x[a-fA-F0-9]{40}$/.test(a);
 
 // Tạo thư mục tạm uploads nếu chưa tồn tại
 const ensureTmpDir = () => {
@@ -30,12 +31,6 @@ const ensureTmpDir = () => {
 };
 
 // ==== Core IPFS ====
-/**
- * Upload file (PDF/JSON) lên IPFS thông qua Pinata
- * @param {string} filePath - đường dẫn file local
- * @param {string} fileName - tên file gợi ý (không bắt buộc với gateway)
- * @returns {{cid: string, url: string}}
- */
 const uploadToIPFS = async (filePath, fileName) => {
   try {
     const data = new FormData();
@@ -70,7 +65,6 @@ const uploadToIPFS = async (filePath, fileName) => {
     });
     throw error;
   } finally {
-    // Xoá file tạm sau khi upload
     try {
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     } catch (e) {
@@ -80,10 +74,6 @@ const uploadToIPFS = async (filePath, fileName) => {
 };
 
 // ==== Receipt generation ====
-/**
- * Sinh file PDF biên lai giao dịch
- * @returns {Promise<string>} đường dẫn file PDF tạm
- */
 const generateReceiptPDF = async (txHash, owner, meta) => {
   const tmpDir = ensureTmpDir();
   const safeHash = txHash.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
@@ -154,10 +144,6 @@ const generateReceiptPDF = async (txHash, owner, meta) => {
   return pdfPath;
 };
 
-/**
- * Sinh file JSON metadata
- * @returns {Promise<string>} đường dẫn file JSON tạm
- */
 const generateMetadataJSON = async (txHash, meta) => {
   const tmpDir = ensureTmpDir();
   const safeHash = txHash.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
@@ -167,15 +153,11 @@ const generateMetadataJSON = async (txHash, meta) => {
 };
 
 // ==== Business flows ====
-/**
- * Sinh PDF + JSON → upload IPFS → lưu DB (idempotent theo txHash)
- */
 const generateAndUploadReceipt = async ({ txHash, owner, meta }) => {
   if (!isValidTxHash(txHash)) throw new Error("Invalid txHash format");
-  if (!owner) throw new Error("Missing owner address");
+  if (!owner || !isEthAddr(owner)) throw new Error("Invalid owner address");
 
   try {
-    // 1) Idempotency: nếu đã có thì trả về luôn
     const existing = await Receipt.findByTxHash(txHash);
     if (existing) {
       logger.warn("Receipt already exists for txHash", { txHash });
@@ -187,21 +169,16 @@ const generateAndUploadReceipt = async ({ txHash, owner, meta }) => {
       };
     }
 
-    // 2) Sinh file tạm
     const pdfPath = await generateReceiptPDF(txHash, owner, meta);
     const jsonPath = await generateMetadataJSON(txHash, meta);
-
-    // Lấy kích thước PDF (trước khi xoá)
     const pdfSize = fs.statSync(pdfPath).size;
 
-    // 3) Upload lên Pinata
     const pdfUpload = await uploadToIPFS(pdfPath, `receipt_${txHash}.pdf`);
     const jsonUpload = await uploadToIPFS(jsonPath, `metadata_${txHash}.json`);
 
-    // 4) Lưu DB (receipt chính gắn với file PDF)
     const receipt = await Receipt.create({
       txHash,
-      owner,
+      owner: owner.toLowerCase(),
       fileName: `receipt_${txHash}.pdf`,
       cid: pdfUpload.cid,
       fileSize: pdfSize,
@@ -212,7 +189,6 @@ const generateAndUploadReceipt = async ({ txHash, owner, meta }) => {
 
     logger.info("✅ Receipt pinned successfully", { cid: receipt.cid });
 
-    // 5) Trả response
     return {
       cid: pdfUpload.cid,
       files: ["receipt.pdf", "metadata.json"],
@@ -224,10 +200,6 @@ const generateAndUploadReceipt = async ({ txHash, owner, meta }) => {
   }
 };
 
-/**
- * Tải file từ IPFS & tính SHA256 để so sánh (best-effort)
- * Vì không giữ file local gốc, ta xác minh tính toàn vẹn của nội dung IPFS
- */
 const verifyReceiptIntegrity = async (txHash) => {
   try {
     if (!isValidTxHash(txHash)) {
@@ -244,19 +216,14 @@ const verifyReceiptIntegrity = async (txHash) => {
     const ipfsBuffer = Buffer.from(res.data);
     const ipfsHash = crypto.createHash("sha256").update(ipfsBuffer).digest("hex");
 
-    // Ở đây chỉ đảm bảo tải được và băm thành công (nếu cần có "expectedHash", hãy lưu trong DB/metadata khi sinh file)
     const ok = Boolean(ipfsHash);
     return { ok, sha256: ipfsHash, cid: receipt.cid };
   } catch (error) {
     logger.error("❌ Verify receipt failed", { error: error.message });
-    // Để controller trả 500 hoặc 404 phù hợp, ta ném lỗi ra ngoài.
     throw error;
   }
 };
 
-/**
- * Chuẩn hoá dữ liệu trả về cho FE, dùng trong controller.getByTxHash
- */
 const findByTxHash = async (txHash) => {
   if (!isValidTxHash(txHash)) return null;
   const receipt = await Receipt.findByTxHash(txHash);
@@ -266,10 +233,35 @@ const findByTxHash = async (txHash) => {
     txHash: receipt.txHash,
     cid: receipt.cid,
     fileName: receipt.fileName,
-    ipfsUrl: receipt.ipfsUrl, // virtual từ model
+    ipfsUrl: receipt.ipfsUrl,
     status: receipt.status,
     createdAt: receipt.createdAt,
   };
+};
+
+/** ✅ NEW: Liệt kê receipts theo user + phân trang (sort createdAt desc) */
+const listByUser = async (ownerAddress, { page = 1, pageSize = 20 } = {}) => {
+  if (!ownerAddress || !isEthAddr(ownerAddress)) {
+    throw new Error("Invalid owner address");
+  }
+  const owner = ownerAddress.toLowerCase();
+  const skip = (page - 1) * pageSize;
+
+  const [total, docs] = await Promise.all([
+    Receipt.countDocuments({ owner }),
+    Receipt.find({ owner }).sort({ createdAt: -1 }).skip(skip).limit(pageSize),
+  ]);
+
+  const items = docs.map((r) => ({
+    txHash: r.txHash,
+    cid: r.cid,
+    fileName: r.fileName,
+    ipfsUrl: r.ipfsUrl,
+    status: r.status,
+    createdAt: r.createdAt,
+  }));
+
+  return { items, total };
 };
 
 module.exports = {
@@ -278,8 +270,9 @@ module.exports = {
   generateAndUploadReceipt,
   verifyReceiptIntegrity,
   findByTxHash,
+  listByUser,              // ✅ export mới
 
-  // exported for unit tests (nếu cần)
+  // for tests
   generateReceiptPDF,
   generateMetadataJSON,
 };
