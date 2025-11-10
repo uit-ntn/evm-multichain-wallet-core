@@ -4,25 +4,52 @@
  */
 
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const router = express.Router();
-const authController = require("../controllers/authController");
+const authController = require("../controllers/authController"); // kiểm tra đúng tên file
 
-// Register routes only if controller handlers exist to avoid startup crash
-if (authController && typeof authController.nonce === 'function') {
-	router.post('/nonce', authController.nonce);
+// Rate limit chung cho auth: 30 req/phút/IP
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// (Tuỳ chọn) endpoint kiểm tra router đã mount
+router.get("/__ping", (req, res) => res.json({ ok: true, scope: "auth" }));
+
+// ===== Nonce =====
+if (authController?.nonce) {
+  router.post("/nonce", limiter, authController.nonce);
 } else {
-	console.warn('Auth controller missing handler: nonce');
-	router.post('/nonce', (req, res) => res.status(501).json({ message: 'Nonce handler not implemented' }));
+  console.warn("Auth controller missing handler: nonce");
+  router.post("/nonce", limiter, (_req, res) =>
+    res.status(501).json({ message: "Nonce handler not implemented" })
+  );
 }
 
-// Login route - redirect to verify for Web3 authentication
-router.post('/login', authController.verify);
-
-if (authController && typeof authController.verify === 'function') {
-	router.post('/verify', authController.verify);
+// ===== Verify =====
+if (authController?.verify) {
+  router.post("/verify", limiter, authController.verify);
 } else {
-	console.warn('Auth controller missing handler: verify');
-	router.post('/verify', (req, res) => res.status(501).json({ message: 'Verify handler not implemented' }));
+  console.warn("Auth controller missing handler: verify");
+  router.post("/verify", limiter, (_req, res) =>
+    res.status(501).json({ message: "Verify handler not implemented" })
+  );
 }
+
+// ===== Me (JWT REQUIRED) =====
+if (authController?.me) {
+  router.get("/me", limiter, authController.me);
+} else {
+  console.warn("Auth controller missing handler: me");
+  router.get("/me", limiter, (_req, res) =>
+    res.status(501).json({ message: "Me handler not implemented" })
+  );
+}
+
+// Login route - redirect to verify for Web3 authentication (backward compatibility)
+router.post('/login', limiter, authController.verify);
 
 module.exports = router;

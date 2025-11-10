@@ -3,212 +3,107 @@
  * Xử lý các HTTP requests liên quan đến user
  */
 
-const jwt = require('jsonwebtoken');
-const userService = require('../services/user.service');
-const { logger } = require('../adapters/logger.adapter');
-const { jwt: jwtConfig } = require('../config');
-const User = require('../models/user.model');
+const userService = require("../services/user.service");
 
 /**
- * GET /api/users
- * [R] Liệt kê user (admin, có phân trang + filter)
+ * GET /api/users/:address
+ * Lấy chi tiết user theo địa chỉ ví
+ * Auth: PUBLIC
  */
-const getAllUsers = async (req, res) => {
+const getUser = async (req, res) => {
   try {
-    // 🧩 1. Kiểm tra JWT từ header
-    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized: Missing token' });
-    }
+    const { address } = req.params;
 
-    const token = authHeader.split(' ')[1];
-    let payload;
-    try {
-      payload = jwt.verify(token, jwtConfig.secret);
-    } catch (err) {
-      return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-    }
-
-    // 🧩 2. Chỉ admin được phép
-    if (payload.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden: Admin access required' });
-    }
-
-    // 🧩 3. Lấy query params
-    let { page = 1, pageSize = 20, role } = req.query;
-    page = parseInt(page, 10);
-    pageSize = parseInt(pageSize, 10);
-
-    // 🧩 4. Validate tham số phân trang
-    if (
-      isNaN(page) || isNaN(pageSize) ||
-      page < 1 || pageSize < 1 ||
-      !Number.isInteger(page) || !Number.isInteger(pageSize) ||
-      pageSize > 100
-    ) {
-      return res.status(400).json({ error: 'Bad Request: Invalid pagination parameters' });
-    }
-
-    // 🧩 5. Rate limit (demo)
-    if (req.tooManyRequests) {
-      return res.status(429).json({ error: 'Too Many Requests: Rate limit exceeded' });
-    }
-
-    // 🧩 6. Gọi service để lấy danh sách user
-    const result = await userService.getAllUsers({ page, pageSize, role });
-
-    // 🧩 7. Trả danh sách user
-    return res.status(200).json(result);
-  } catch (error) {
-    logger.error('Error getting all users', { error: error.message });
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-/**
- * POST /api/users - Upsert user by address (authenticated user)
- * - Requires Authorization: Bearer <token>
- * - Body: { address?: string, displayName?: string }
- * - Uses address from JWT as authoritative; if address provided in body must match token address.
- */
-const upsertUser = async (req, res) => {
-  try {
-    // Verify token from Authorization header if req.user not already populated
-    let tokenPayload = null;
-    if (!req.user) {
-      const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-      if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Unauthorized: Missing token' });
-      }
-      const token = authHeader.split(' ')[1];
-      try {
-        tokenPayload = jwt.verify(token, jwtConfig.secret);
-      } catch (err) {
-        return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-      }
-    } else {
-      tokenPayload = req.user;
-    }
-
-    const requesterAddress = (tokenPayload.address || '').toLowerCase();
-    if (!requesterAddress) {
-      return res.status(401).json({ error: 'Unauthorized: token missing address' });
-    }
-
-    // Read body; prefer address from token; if body.address present it must match token address
-    const { address: bodyAddress, displayName } = req.body || {};
-    if (bodyAddress && bodyAddress.toLowerCase() !== requesterAddress) {
-      return res.status(403).json({ error: 'Forbidden: address in body does not match token' });
-    }
-
-    const address = requesterAddress;
-
-    // Validate address format
+    // Kiểm tra định dạng địa chỉ ví
     const addrRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!addrRegex.test(address)) {
-      return res.status(422).json({ error: 'Unprocessable Entity: invalid address format' });
+      return res.status(400).json({ message: "Invalid address format" });
     }
 
-    // Validate displayName if provided
-    let cleanDisplayName = undefined;
-    if (typeof displayName !== 'undefined') {
-      if (displayName === null) {
-        cleanDisplayName = '';
-      } else if (typeof displayName !== 'string') {
-        return res.status(422).json({ error: 'Unprocessable Entity: displayName must be a string' });
-      } else {
-        const name = displayName.trim();
-        // Allow letters, numbers, dots, hyphens, underscores and spaces; length 1-50
-        const nameRegex = /^[\w.\- ]{1,50}$/u;
-        if (name.length === 0 || !nameRegex.test(name)) {
-          return res.status(422).json({ error: 'Unprocessable Entity: displayName not valid' });
-        }
-        cleanDisplayName = name;
-      }
+    const user = await userService.getUserByAddress(address);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // Call service to upsert
-    const result = await userService.upsertUserByAddress({ address, displayName: cleanDisplayName, role: tokenPayload.role || 'user' });
-
-    // Log creation event on new user (audit)
-    if (result.created) {
-      logger.info('User upsert: created', { address: result.user.address, displayName: result.user.displayName });
-    } else {
-      logger.info('User upsert: updated', { address: result.user.address, displayName: result.user.displayName });
-    }
-
-    // Return 201 if created, 200 if updated
-    return res.status(result.created ? 201 : 200).json({ user: result.user, created: result.created });
+    return res.status(200).json(user);
   } catch (error) {
-    // Handle known error codes from service
-    if (error && error.code === 'DISPLAYNAME_TAKEN') {
-      return res.status(409).json({ error: 'Conflict: displayName already in use' });
-    }
-    if (error && error.code === 'DUPLICATE_KEY') {
-      return res.status(409).json({ error: 'Conflict: duplicate key' });
-    }
-    console.error("🔥 Error upserting user:", error);
-    logger.error('Error upserting user', { error });
-    return res.status(500).json({ error: error.message || 'Internal server error' });
-
+    console.error("User get error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
 /**
- * DELETE /api/users/:address
- * [D] Xoá user (chỉ admin)
+ * PATCH /api/users/display-name
+ * Cập nhật tên hiển thị (ENS/custom)
+ * Auth: JWT REQUIRED
  */
-const deleteUser = async (req, res) => {
+const updateDisplayName = async (req, res) => {
   try {
-    // 🧩 1. Kiểm tra JWT
-    const authHeader = req.headers["authorization"] || req.headers["Authorization"];
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized: Missing token" });
+    const { address, displayName } = req.body;
+    const user = req.user; // Lấy thông tin user từ middleware verifyJWT
+
+    // Kiểm tra quyền truy cập (chỉ chủ ví mới được cập nhật)
+    if (!user || user.address.toLowerCase() !== address.toLowerCase()) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const token = authHeader.split(" ")[1];
-    let payload;
-    try {
-      payload = jwt.verify(token, jwtConfig.secret);
-    } catch (err) {
-      return res.status(401).json({ error: "Unauthorized: Invalid token" });
-    }
-
-    // 🧩 2. Chỉ admin mới được xoá
-    if (payload.role !== "admin") {
-      return res.status(403).json({ error: "Forbidden: Admin access required" });
-    }
-
-    // 🧩 3. Lấy địa chỉ user cần xoá
-    const { address } = req.params;
-    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
-      return res.status(400).json({ error: "Bad Request: Invalid address format" });
-    }
-
-    // 🧩 4. Tìm user trong DB
-    const user = await User.findOne({ address: address.toLowerCase() });
-    if (!user) {
-      // Idempotent – vẫn trả OK
-      return res.status(200).json({ message: "deleted", address });
-    }
-
-    // 🧩 5. Service call: Thực hiện xoá (hard delete hoặc anonymize)
-    const deleted = await userService.deleteUserByAddress(address, false); // false = xoá cứng
-    if (!deleted) {
-      return res.status(200).json({ message: "deleted", address });
-    }
-    logger.info("User deleted", { address });
-
-    // 🧩 6. Trả kết quả
-    return res.status(200).json({ message: "deleted", address });
+    const result = await userService.updateDisplayName(address, displayName);
+    return res.status(200).json(result);
   } catch (error) {
-    logger.error("Error deleting user", { error: error.message });
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("Update displayName error:", error.message);
+
+    // Phân loại lỗi theo rubric
+    if (error.message.includes("empty"))
+      return res.status(400).json({ message: error.message });
+    if (error.message.includes("Invalid"))
+      return res.status(422).json({ message: error.message });
+    if (error.message.includes("too long"))
+      return res.status(400).json({ message: error.message });
+    if (error.message === "User not found")
+      return res.status(404).json({ message: "User not found" });
+
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
-module.exports = {
-  getAllUsers,
-  upsertUser,
-  deleteUser,
+/**
+ * PATCH /api/users/role
+ * Đổi vai trò user (ADMIN only)
+ * Auth: JWT REQUIRED (role = admin)
+ */
+const updateUserRole = async (req, res) => {
+  try {
+    const { address, role } = req.body;
+    const requester = req.user; // Lấy thông tin từ token
+
+    // 1️⃣ Kiểm tra đăng nhập
+    if (!requester) {
+      return res.status(401).json({ message: "Missing JWT" });
+    }
+
+    // 2️⃣ Kiểm tra quyền admin
+    if (requester.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden: Admin only" });
+    }
+
+    // 3️⃣ Gọi service để đổi role
+    const result = await userService.updateUserRole(
+      requester.address,
+      address,
+      role
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Update user role error:", error.message);
+
+    if (error.message.includes("Invalid role"))
+      return res.status(400).json({ message: error.message });
+    if (error.message === "User not found")
+      return res.status(404).json({ message: error.message });
+
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
 };
+
+module.exports = { getUser, updateDisplayName, updateUserRole };

@@ -3,25 +3,31 @@
  * Định nghĩa các routes cho users
  */
 
-const express = require('express');
+// server/routes/user.route.js
+const express = require("express");
 const router = express.Router();
-const userController = require('../controllers/userController');
+const userController = require("../controllers/userController"); 
+const { verifyJWT } = require("../middlewares/authMiddleware");
 
-// Get all users
-router.get('/', userController.getAllUsers);
+/**
+ * @route GET /api/users/:address
+ * @desc  Lấy chi tiết user theo địa chỉ ví (PUBLIC)
+ * @access Public
+ */
+router.get("/:address", userController.getUser);
 
-// Upsert user by address (controller will validate JWT)
-if (userController && typeof userController.upsertUser === 'function') {
-  router.post('/', userController.upsertUser);
-} else {
-  console.warn('User controller missing handler: upsertUser');
-  router.post('/', (req, res) => res.status(501).json({ message: 'Upsert handler not implemented' }));
-}
+/**
+ * @route PATCH /api/users/display-name
+ * @desc  Cập nhật tên hiển thị (ENS/custom)
+ * @access Private (JWT)
+ */
+router.patch("/display-name", verifyJWT, userController.updateDisplayName);
 
-// Liệt kê user (chỉ admin)
-router.get('/', userController.getAllUsers);
-
-// Xoá user (chỉ admin)
-router.delete("/:address", userController.deleteUser);
+/**
+ * @route PATCH /api/users/role
+ * @desc  Đổi vai trò user (ADMIN only)
+ * @access Private (JWT, role = admin)
+ */
+router.patch("/role", verifyJWT, userController.updateUserRole);
 
 module.exports = router;

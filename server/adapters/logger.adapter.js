@@ -39,7 +39,7 @@ const colors = {
  */
 function formatLog(level, message, meta = {}) {
   const timestamp = new Date().toISOString();
-  
+
   // Production: JSON format for structured logging
   if (config.nodeEnv === 'production') {
     return JSON.stringify({
@@ -49,13 +49,13 @@ function formatLog(level, message, meta = {}) {
       ...meta,
     });
   }
-  
+
   // Development: Human-readable format with colors
   const color = colors[level] || colors.reset;
-  const metaStr = Object.keys(meta).length > 0 
+  const metaStr = Object.keys(meta).length > 0
     ? `\n  ${JSON.stringify(meta, null, 2)}`
     : '';
-  
+
   return `${color}[${timestamp}] ${level.toUpperCase()}:${colors.reset} ${message}${metaStr}`;
 }
 
@@ -77,7 +77,7 @@ const logger = {
   info: (message, meta = {}) => log('info', message, meta),
   debug: (message, meta = {}) => log('debug', message, meta),
   trace: (message, meta = {}) => log('trace', message, meta),
-  
+
   /**
    * Create child logger with default metadata
    */
@@ -94,23 +94,21 @@ const logger = {
  * Morgan HTTP Logger Configuration
  */
 
-// Custom Morgan format
-const morganFormat = config.nodeEnv === 'production' 
-  ? 'combined' // Standard Apache combined log format for production
-  : 'dev';     // Colored output for development
+// Chế độ morgan
+const morganFormat = config.nodeEnv === 'production'
+  ? 'combined'
+  : 'dev';
 
-// Custom token for response time in milliseconds
-morgan.token('response-time-ms', (req, res) => {
-  const responseTime = res.getHeader('X-Response-Time');
-  return responseTime ? `${responseTime}ms` : '-';
-});
-
-// Custom token for request ID (if available)
+// Token request-id (nếu có)
 morgan.token('request-id', (req) => {
   return req.id || req.headers['x-request-id'] || '-';
 });
 
-// Custom format for JSON logging in production
+// ❗ Không còn đọc X-Response-Time header nữa.
+// Nếu cần, ta vẫn có thể đọc từ res.locals.responseTimeMs (được set bởi middleware),
+// nhưng ở đây dùng luôn token built-in :response-time của morgan.
+
+// Format JSON cho production (dùng :response-time built-in)
 const jsonFormat = JSON.stringify({
   timestamp: ':date[iso]',
   method: ':method',
@@ -136,7 +134,7 @@ const httpLogger = morgan(
       }
       return false;
     },
-    
+
     // Custom stream for structured logging
     stream: {
       write: (message) => {
@@ -157,14 +155,13 @@ const httpLogger = morgan(
 );
 
 /**
- * Error logger for Morgan
+ * Error logger cho các response >= 400
  */
 const errorLogger = morgan(
   config.nodeEnv === 'production' ? jsonFormat : morganFormat,
   {
-    // Only log error responses
     skip: (req, res) => res.statusCode < 400,
-    
+
     stream: {
       write: (message) => {
         if (config.nodeEnv === 'production') {
@@ -184,29 +181,36 @@ const errorLogger = morgan(
 
 /**
  * Request ID middleware (for request tracing)
+ * — set header TRƯỚC khi đi tiếp là an toàn
  */
 function requestIdMiddleware(req, res, next) {
-  req.id = req.headers['x-request-id'] || 
+  req.id = req.headers['x-request-id'] ||
            `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  if (!res.headersSent) {
-    res.setHeader('X-Request-ID', req.id);
+  try {
+    if (!res.headersSent) {
+      res.setHeader('X-Request-ID', req.id);
+    }
+  } catch (_) {
+    // ignore
   }
   next();
 }
 
 /**
  * Response time middleware
+ * — KHÔNG set header trong 'finish' để tránh ERR_HTTP_HEADERS_SENT
+ * — Chỉ lưu vào res.locals để morgan/handlers khác có thể dùng
  */
 function responseTimeMiddleware(req, res, next) {
   const start = Date.now();
-  
+
+  // Lưu thời gian khi response hoàn tất — không động chạm headers
   res.on('finish', () => {
-    const duration = Date.now() - start;
-    if (!res.headersSent) {
-      res.setHeader('X-Response-Time', duration);
-    }
+    res.locals = res.locals || {};
+    res.locals.responseTimeMs = Date.now() - start;
+    // ❌ KHÔNG setHeader ở đây (headers đã gửi)
   });
-  
+
   next();
 }
 

@@ -2,186 +2,111 @@
  * User Service
  * Business logic cho user management
  */
-
-const User = require('../models/user.model');
-const { logger } = require('../adapters/logger.adapter');
-
-// const getAllUsers = async () => {
-//   try {
-//     const users = await User.find({}).select('-password');
-//     return users;
-//   } catch (error) {
-//     logger.error('Error getting all users', { error: error.message });
-//     throw error;
-//   }
-// };
-/**
- * Lấy danh sách user (chỉ admin)
- * @param {Object} params
- * @param {number} params.page
- * @param {number} params.pageSize
- * @param {string} [params.role]
- */
-const getAllUsers = async ({ page, pageSize, role }) => {
-  try {
-    const filter = {};
-    if (role) filter.role = role;
-
-    const total = await User.countDocuments(filter);
-
-    const items = await User.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .select('address displayName role createdAt'); // tránh trả về nonce, stakedAmount
-
-    return {
-      items,
-      page,
-      pageSize,
-      total,
-    };
-  } catch (error) {
-    logger.error('Error fetching user list', { error: error.message });
-    throw error;
-  }
-};
+const User = require("../models/user.model");
 
 /**
- * Upsert user by address: create if not exists or update displayName if exists.
- * Role chỉ được set khi tạo mới user (không cập nhật sau này).
- * Returns { user, created: boolean }
+ * Tìm user theo địa chỉ ví
+ * @param {string} address
+ * @returns {object|null}
  */
-const upsertUserByAddress = async ({ address, displayName, role }) => {
-  try {
-    // ✅ 1. Chuẩn hóa địa chỉ
-    const addr = address.toLowerCase();
+async function getUserByAddress(address) {
+  const normalized = address.toLowerCase();
+  const user = await User.findOne({ address: normalized }).lean();
 
-    // ✅ 2. Kiểm tra displayName trùng (nếu có)
-    if (typeof displayName === 'string' && displayName.length > 0) {
-      const existing = await User.findOne({ displayName: displayName });
-      if (existing && existing.address.toLowerCase() !== addr) {
-        const err = new Error('displayName already in use');
-        err.code = 'DISPLAYNAME_TAKEN';
-        throw err;
-      }
-    }
+  if (!user) return null;
 
-    // ✅ 3. Tạo object cập nhật
-    const set = {};
-    if (typeof displayName === 'string') set.displayName = displayName;
-
-    // ✅ Cấu hình upsert (tạo mới user nếu chưa tồn tại)
-    const update = {
-      $set: set,
-      $setOnInsert: {
-        address: addr,
-        nonce: '',               // Nonce mặc định rỗng
-        stakedAmount: '0',
-        tier: 'Bronze',
-        role: 'user'             // ⚠️ Role chỉ gán khi tạo mới
-      }
-    };
-
-    // ✅ 4. Kiểm tra user hiện tại (để biết có tồn tại hay chưa)
-    const userBefore = await User.findOne({ address: addr });
-    
-    // ✅ 5. Upsert (tạo nếu chưa có, cập nhật nếu có)
-    const user = await User.findOneAndUpdate(
-      { address: addr },
-      update,
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-
-    // ✅ 7. Xác định status (201 nếu mới tạo, 200 nếu cập nhật)
-    const created = !userBefore;
-
-    return { user, created };
-  } catch (error) {
-    // ✅ 8. Bắt lỗi duplicate key hoặc DB error
-    if (error && error.code === 11000) {
-      const err = new Error('duplicate key');
-      err.code = 'DUPLICATE_KEY';
-      throw err;
-    }
-    logger.error('Error upserting user', { error: error.message });
-    throw error;
-  }
-};
+  return {
+    address: user.address,
+    displayName: user.displayName || "",
+    role: user.role,
+  };
+}
 
 /**
- * Xoá user theo address (Admin)
- * @param {string} address - địa chỉ ví cần xoá
- * @param {boolean} anonymize - true = xoá mềm (ẩn danh), false = xoá cứng
- * @returns {Promise<boolean>} true nếu đã xoá, false nếu user không tồn tại
+ * Cập nhật tên hiển thị (ENS/custom)
+ * @param {string} address - địa chỉ ví user
+ * @param {string} displayName - tên hiển thị mới
+ * @returns {object} - { message, displayName }
  */
-const deleteUserByAddress = async (address, anonymize = false) => {
-  try {
-    const addr = address.toLowerCase();
-    const user = await User.findOne({ address: addr });
-
-    // Nếu không tồn tại → idempotent: vẫn trả true
-    if (!user) return false;
-
-    if (anonymize) {
-      // Xoá mềm: chỉ ẩn danh, không xoá record
-      user.displayName = "";
-      user.nonce = "";
-      user.tier = "Bronze";
-      user.stakedAmount = "0";
-      await user.save();
-      logger.info("User anonymized", { address: addr });
-      return true;
-    }
-
-    // Xoá cứng khỏi DB
-    await User.deleteOne({ address: addr });
-    logger.info("User deleted", { address: addr });
-    return true;
-  } catch (error) {
-    logger.error("Error deleting user", { error: error.message });
-    throw error;
+async function updateDisplayName(address, displayName) {
+  // Kiểm tra dữ liệu đầu vào
+  if (!displayName || displayName.trim() === "") {
+    throw new Error("Display name cannot be empty");
   }
-};
 
-// /**
-//  * Cập nhật tier dựa trên stakedAmount
-//  * @param {string} address - địa chỉ ví user
-//  * @param {string} newStakeAmount - số lượng token đã stake (wei)
-//  * @returns {Promise<Object>} user sau khi cập nhật
-//  */
-// const updateStakeTier = async (address, newStakeAmount) => {
-//   try {
-//     const addr = address.toLowerCase();
-//     const user = await User.findOne({ address: addr });
-//     if (!user) throw new Error("User not found");
+  const normalizedDisplayName = displayName.trim();
 
-//     // Cập nhật lượng stake
-//     user.stakedAmount = newStakeAmount;
+  // Kiểm tra định dạng (ENS/custom)
+  const regex = /^[a-zA-Z0-9_.-]+(\.eth)?$/;
+  if (!regex.test(normalizedDisplayName)) {
+    throw new Error("Invalid display name format");
+  }
 
-//     // Chuyển từ wei → TRADE (nếu bạn dùng 18 decimals)
-//     const stakeInTrade = parseFloat(newStakeAmount) / 1e18;
+  // Kiểm tra độ dài
+  if (normalizedDisplayName.length > 50) {
+    throw new Error("Display name too long");
+  }
 
-//     // Xác định tier theo lượng stake
-//     if (stakeInTrade >= 10000) user.tier = "Platinum";
-//     else if (stakeInTrade >= 5000) user.tier = "Gold";
-//     else if (stakeInTrade >= 1000) user.tier = "Silver";
-//     else user.tier = "Bronze";
+  // Chuẩn hóa địa chỉ ví
+  const normalizedAddress = address.toLowerCase();
 
-//     await user.save();
+  // Cập nhật user trong DB
+  const updatedUser = await User.findOneAndUpdate(
+    { address: normalizedAddress },
+    { displayName: normalizedDisplayName },
+    { new: true, runValidators: true }
+  );
 
-//     logger.info("Tier updated", { address: addr, tier: user.tier });
-//     return user;
-//   } catch (error) {
-//     logger.error("Error updating user tier", { error: error.message });
-//     throw error;
-//   }
-// };
+  if (!updatedUser) {
+    throw new Error("User not found");
+  }
 
-    
+  return {
+    message: "updated",
+    displayName: updatedUser.displayName,
+  };
+}
+
+/**
+ * Đổi vai trò (role) của user
+ * @param {string} adminAddress - địa chỉ admin đang thực hiện
+ * @param {string} targetAddress - địa chỉ ví user cần đổi
+ * @param {string} newRole - vai trò mới ('user' hoặc 'admin')
+ * @returns {object} - { message, address, role }
+ */
+async function updateUserRole(adminAddress, targetAddress, newRole) {
+  const allowedRoles = ["user", "admin"];
+  if (!allowedRoles.includes(newRole)) {
+    throw new Error("Invalid role");
+  }
+
+  const normalizedTarget = targetAddress.toLowerCase();
+  const normalizedAdmin = adminAddress.toLowerCase();
+
+  // Tìm user cần đổi vai trò
+  const user = await User.findOne({ address: normalizedTarget });
+  if (!user) throw new Error("User not found");
+
+  // Cập nhật role và lưu audit trail
+  user.role = newRole;
+  user.updatedBy = normalizedAdmin;
+  user.lastRoleChangeAt = new Date();
+  await user.save();
+
+  // Log để admin dễ theo dõi trong terminal
+  console.log(
+    `[AUDIT] ${normalizedAdmin} changed role of ${normalizedTarget} -> ${newRole} at ${new Date().toISOString()}`
+  );
+
+  return {
+    message: "updated",
+    address: user.address,
+    role: user.role,
+  };
+}
+
 module.exports = {
-  getAllUsers,
-  upsertUserByAddress,
-  deleteUserByAddress,
-  // updateStakeTier,
+  getUserByAddress,
+  updateDisplayName,
+  updateUserRole, 
 };

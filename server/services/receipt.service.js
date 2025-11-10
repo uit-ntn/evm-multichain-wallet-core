@@ -1,80 +1,535 @@
 /**
  * Receipt Service
- * Business logic cho IPFS receipts
+ * Business logic cho IPFS receipts (Pinata version)
  */
 
-const Receipt = require('../models/receipt.model');
+const axios = require("axios");
+const FormData = require("form-data");
 const fs = require("fs");
 const path = require("path");
-const FormData = require('form-data');
-const axios = require('axios');
+const PDFDocument = require("pdfkit");
+const crypto = require("crypto");
 const { logger } = require("../adapters/logger.adapter");
+const Receipt = require("../models/receipt.model");
 
-/**
- * Receipt Service - Upload file lên IPFS
- */
+// ==== Config / ENV ====
+const pinataJWT = process.env.PINATA_JWT;
+if (!pinataJWT) throw new Error("Missing PINATA_JWT in environment");
 
-// Kiểm tra IPFS provider từ .env
-const provider = process.env.IPFS_PROVIDER || 'web3storage';
+const IPFS_PUBLIC_GATEWAY =
+  process.env.IPFS_PUBLIC_GATEWAY || "https://gateway.pinata.cloud/ipfs/";
+const PIN_PROVIDER = "pinata"; // dùng để trả về thông tin nhà cung cấp pin
 
-if (provider === 'web3storage') {
-  const token = process.env.IPFS_API_KEY;
-  if (!token) throw new Error("Missing IPFS_API_KEY for Web3.Storage");
-} else if (provider === 'pinata') {
-  const pinataJWT = process.env.PINATA_JWT;
-  if (!pinataJWT) throw new Error("Missing PINATA_JWT for Pinata");
-} else {
-  throw new Error(`Unsupported IPFS provider: ${provider}`);
-}
+// Chế độ xoá: 'unpin' (khuyến nghị) | 'delete' (xoá DB)
+const RECEIPT_DELETE_MODE = (process.env.RECEIPT_DELETE_MODE || "unpin").toLowerCase();
 
-/**
- * Upload file lên IPFS
- * @param {string} filePath - đường dẫn tạm của file
- * @param {string} fileName - tên file gốc
- * @returns {Promise<{ cid: string, url: string }>}
- */
+// ==== Helpers ====
+const isValidTxHash = (tx) => /^0x[a-fA-F0-9]{64}$/.test(tx);
+const isEthAddr = (a) => /^0x[a-fA-F0-9]{40}$/.test(a);
+
+// Tạo thư mục tạm uploads nếu chưa tồn tại
+const ensureTmpDir = () => {
+  const tmpDir = path.join(__dirname, "../../uploads");
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  return tmpDir;
+};
+
+/** Tải nội dung CID từ gateway về file tạm (cho fallback khi không dùng được pinByHash) */
+const downloadCidToTemp = async (cid) => {
+  const url = `${IPFS_PUBLIC_GATEWAY}${cid}`;
+  const tmpDir = ensureTmpDir();
+  const tmpFile = path.join(tmpDir, `repin_${cid.slice(0, 20)}.bin`);
+
+  const res = await axios.get(url, { responseType: "stream", timeout: 30_000 });
+  await new Promise((resolve, reject) => {
+    const ws = fs.createWriteStream(tmpFile);
+    res.data.pipe(ws);
+    ws.on("finish", resolve);
+    ws.on("error", reject);
+  });
+
+  return tmpFile;
+};
+
+// ==== Core IPFS ====
 const uploadToIPFS = async (filePath, fileName) => {
   try {
-    const fileBuffer = fs.readFileSync(filePath);
-    let cid, url;
-    
-    if (provider === 'web3storage') {
-      const { Web3Storage, File } = require("web3.storage");
-      const token = process.env.IPFS_API_KEY;
-      const storage = new Web3Storage({ token });
-      const files = [new File([fileBuffer], fileName)];
-      cid = await storage.put(files);
-      url = `https://ipfs.io/ipfs/${cid}/${fileName}`;
-    } else if (provider === 'pinata') {
-      // Upload file using Pinata API
-      const formData = new FormData();
-      formData.append('file', fileBuffer, fileName);
-      
-      const pinataMetadata = JSON.stringify({
-        name: fileName,
-      });
-      formData.append('pinataMetadata', pinataMetadata);
+    const data = new FormData();
+    data.append("file", fs.createReadStream(filePath), fileName || undefined);
 
-      const response = await axios.post('https://api.pinata.cloud/pinning/pinFileToIPFS', formData, {
-        maxBodyLength: 'Infinity',
+    const res = await axios.post(
+      "https://api.pinata.cloud/pinning/pinFileToIPFS",
+      data,
+      {
+        maxBodyLength: Infinity,
+        timeout: 60_000,
         headers: {
-          'Content-Type': `multipart/form-data; boundary=${formData._boundary}`,
-          'Authorization': `Bearer ${process.env.PINATA_JWT}`
-        }
-      });
+          Authorization: `Bearer ${pinataJWT}`,
+          ...data.getHeaders(),
+        },
+      }
+    );
 
-      cid = response.data.IpfsHash;
-      url = `https://gateway.pinata.cloud/ipfs/${cid}`;
+    const cid = res?.data?.IpfsHash;
+    const url = `${IPFS_PUBLIC_GATEWAY}${cid}`;
+    if (!cid) {
+      throw new Error("Pinata response missing IpfsHash");
     }
-    
-    logger.info("File uploaded to IPFS", { provider, cid, url });
+
+    logger.info("✅ File uploaded to IPFS via Pinata", { cid, url });
     return { cid, url };
   } catch (error) {
-    logger.error("IPFS upload error", { provider, error: error.message });
+    logger.error("❌ IPFS upload error (Pinata)", {
+      error: error?.message,
+      code: error?.code,
+      status: error?.response?.status,
+    });
     throw error;
   } finally {
-    fs.unlinkSync(filePath); // Xoá file tạm sau khi upload
+    try {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch (e) {
+      logger.warn("Cannot remove temp file", { filePath, error: e.message });
+    }
   }
 };
 
-module.exports = { uploadToIPFS };
+// ==== Receipt generation ====
+const generateReceiptPDF = async (txHash, owner, meta) => {
+  const tmpDir = ensureTmpDir();
+  const safeHash = txHash.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
+  const pdfPath = path.join(tmpDir, `receipt_${safeHash}.pdf`);
+
+  const doc = new PDFDocument({ margin: 50, size: "A5" });
+  const writeStream = fs.createWriteStream(pdfPath);
+  doc.pipe(writeStream);
+
+  // Header
+  doc.fontSize(20).font("Helvetica-Bold").text("SAMPLE RECEIPT", { align: "center" }).moveDown(0.3);
+  doc.fontSize(10).font("Helvetica").text("Blockchain Transaction Receipt", { align: "center" }).moveDown(0.5);
+  doc.fontSize(8).text("Generated by EVM Multichain Wallet", { align: "center" }).moveDown(1);
+
+  // Separator line
+  doc.moveTo(40, doc.y).lineTo(300, doc.y).strokeColor("#000").stroke();
+
+  // Transaction info
+  doc.moveDown(0.8);
+  doc.fontSize(10).font("Helvetica-Bold").text("TRANSACTION DETAILS");
+  doc.moveDown(0.5);
+  doc.fontSize(9).font("Helvetica");
+  doc.text(`Tx Hash: ${txHash}`, { width: 280 });
+  doc.text(`Owner: ${owner}`);
+  doc.text(`Date: ${new Date().toLocaleString()}`);
+  doc.moveDown(0.3);
+
+  // Metadata block
+  doc.moveDown(0.8);
+  doc.fontSize(10).font("Helvetica-Bold").text("TRADE DETAILS");
+  doc.moveDown(0.3);
+  doc.font("Helvetica");
+  doc.text(`Pair: ${meta?.pair ?? "N/A"}`);
+  doc.text(`Amount In: ${meta?.amountIn ?? "N/A"} ${meta?.symbolIn ?? "ETH"}`);
+  doc.text(`Amount Out: ${meta?.amountOut ?? "N/A"} ${meta?.symbolOut ?? "USDT"}`);
+  doc.text(`Price: ${meta?.price ?? "N/A"}`);
+  if (meta?.chainName) doc.text(`Network: ${meta.chainName}`);
+  if (meta?.status) doc.text(`Status: ${meta.status}`);
+
+  // Dashed separator
+  const y = doc.y + 8;
+  doc.moveTo(40, y).lineTo(300, y).dash(3, { space: 3 }).strokeColor("#555").stroke().undash();
+
+  // Summary
+  doc.moveDown(1);
+  doc.fontSize(10).font("Helvetica-Bold").text("TOTAL SUMMARY");
+  doc.font("Helvetica").fontSize(9);
+  doc.text(`Final Amount: ${meta?.amountOut ?? "N/A"} ${meta?.symbolOut ?? "USDT"}`, { align: "left" });
+  doc.text(`Network: ${meta?.chainName ?? "Sepolia Testnet"}`, { align: "left" });
+  doc.text(`Status: ${meta?.status ?? "✅ Confirmed"}`, { align: "left" });
+
+  // Signature line
+  doc.moveDown(2);
+  const signatureLineY = doc.y + 10;
+  doc.moveTo(60, signatureLineY).lineTo(200, signatureLineY).strokeColor("#000").stroke();
+  doc.fontSize(9).text("Authorized Signature", 70, signatureLineY + 5);
+
+  // Footer
+  doc.moveDown(2);
+  doc.fontSize(8).fillColor("#555").text("Thank you for using EVM Multichain Wallet", { align: "center" });
+
+  doc.end();
+  await new Promise((resolve, reject) => {
+    writeStream.on("finish", resolve);
+    writeStream.on("error", reject);
+  });
+
+  return pdfPath;
+};
+
+const generateMetadataJSON = async (txHash, meta) => {
+  const tmpDir = ensureTmpDir();
+  const safeHash = txHash.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
+  const jsonPath = path.join(tmpDir, `metadata_${safeHash}.json`);
+  fs.writeFileSync(jsonPath, JSON.stringify(meta ?? {}, null, 2));
+  return jsonPath;
+};
+
+// ==== Business flows ====
+const generateAndUploadReceipt = async ({ txHash, owner, meta }) => {
+  if (!isValidTxHash(txHash)) throw new Error("Invalid txHash format");
+  if (!owner || !isEthAddr(owner)) throw new Error("Invalid owner address");
+
+  try {
+    const existing = await Receipt.findByTxHash(txHash);
+    if (existing) {
+      logger.warn("Receipt already exists for txHash", { txHash });
+      return {
+        cid: existing.cid,
+        files: ["receipt.pdf", "metadata.json"],
+        urls: [existing.ipfsUrl],
+        message: "Receipt already exists for this transaction",
+      };
+    }
+
+    const pdfPath = await generateReceiptPDF(txHash, owner, meta);
+    const jsonPath = await generateMetadataJSON(txHash, meta);
+    const pdfSize = fs.statSync(pdfPath).size;
+
+    const pdfUpload = await uploadToIPFS(pdfPath, `receipt_${txHash}.pdf`);
+    const jsonUpload = await uploadToIPFS(jsonPath, `metadata_${txHash}.json`);
+
+    const receipt = await Receipt.create({
+      txHash,
+      owner: owner.toLowerCase(),
+      fileName: `receipt_${txHash}.pdf`,
+      cid: pdfUpload.cid,
+      fileSize: pdfSize,
+      mimeType: "application/pdf",
+      status: "PINNED",
+      metadata: meta ?? {},
+    });
+
+    logger.info("✅ Receipt pinned successfully", { cid: receipt.cid });
+
+    return {
+      cid: pdfUpload.cid,
+      files: ["receipt.pdf", "metadata.json"],
+      urls: [pdfUpload.url, jsonUpload.url],
+    };
+  } catch (error) {
+    logger.error("❌ Error in generateAndUploadReceipt", { error: error.message });
+    throw error;
+  }
+};
+
+const verifyReceiptIntegrity = async (txHash) => {
+  try {
+    if (!isValidTxHash(txHash)) {
+      return { ok: false, error: "Invalid txHash format" };
+    }
+
+    const receipt = await Receipt.findByTxHash(txHash);
+    if (!receipt) {
+      return { ok: false, error: "Receipt not found" };
+    }
+
+    const fileUrl = `${IPFS_PUBLIC_GATEWAY}${receipt.cid}`;
+    const res = await axios.get(fileUrl, { responseType: "arraybuffer", timeout: 30_000 });
+    const ipfsBuffer = Buffer.from(res.data);
+    const ipfsHash = crypto.createHash("sha256").update(ipfsBuffer).digest("hex");
+
+    const ok = Boolean(ipfsHash);
+    return { ok, sha256: ipfsHash, cid: receipt.cid };
+  } catch (error) {
+    logger.error("❌ Verify receipt failed", { error: error.message });
+    throw error;
+  }
+};
+
+const findByTxHash = async (txHash) => {
+  if (!isValidTxHash(txHash)) return null;
+  const receipt = await Receipt.findByTxHash(txHash);
+  if (!receipt) return null;
+
+  return {
+    txHash: receipt.txHash,
+    cid: receipt.cid,
+    fileName: receipt.fileName,
+    ipfsUrl: receipt.ipfsUrl,
+    status: receipt.status,
+    createdAt: receipt.createdAt,
+  };
+};
+
+/** ✅ NEW: Liệt kê receipts theo user + phân trang (sort createdAt desc) */
+const listByUser = async (ownerAddress, { page = 1, pageSize = 20 } = {}) => {
+  if (!ownerAddress || !isEthAddr(ownerAddress)) {
+    throw new Error("Invalid owner address");
+  }
+  const owner = ownerAddress.toLowerCase();
+  const skip = (page - 1) * pageSize;
+
+  const [total, docs] = await Promise.all([
+    Receipt.countDocuments({ owner }),
+    Receipt.find({ owner }).sort({ createdAt: -1 }).skip(skip).limit(pageSize),
+  ]);
+
+  const items = docs.map((r) => ({
+    txHash: r.txHash,
+    cid: r.cid,
+    fileName: r.fileName,
+    ipfsUrl: r.ipfsUrl,
+    status: r.status,
+    createdAt: r.createdAt,
+  }));
+
+  return { items, total };
+};
+
+/** ✅ NEW: Build URL tải file theo txHash + type (hiện hỗ trợ pdf) */
+const getDownloadUrl = async (txHash, { type = "pdf" } = {}) => {
+  if (!isValidTxHash(txHash)) throw new Error("Invalid txHash format");
+
+  const rec = await Receipt.findByTxHash(txHash);
+  if (!rec) return { url: null };
+
+  if (type !== "pdf") {
+    // nếu sau này có jsonCid trong model thì map ở đây
+    return { url: null };
+  }
+
+  const url = `${IPFS_PUBLIC_GATEWAY}${rec.cid}`;
+  return { url, fileName: rec.fileName || `receipt_${txHash}.pdf` };
+};
+
+/** ✅ NEW (Yêu cầu 6): Re-pin/refresh CID trên Pinata theo txHash
+ *  - Ưu tiên pinByHash
+ *  - Nếu plan miễn phí trả "PAID_FEATURE_ONLY" → fallback tải lại CID & pinFileToIPFS
+ */
+const repinByTxHash = async (txHash, { actor = "unknown", role = "unknown" } = {}) => {
+  if (!isValidTxHash(txHash)) {
+    const err = new Error("Invalid txHash format");
+    err.code = "BAD_REQUEST";
+    throw err;
+  }
+
+  const receipt = await Receipt.findByTxHash(txHash);
+  if (!receipt) {
+    const err = new Error("Receipt not found");
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+
+  const cid = receipt.cid;
+
+  try {
+    // 1) Thử Pinata: pinByHash (CID)
+    const body = {
+      hashToPin: cid,
+      pinataMetadata: {
+        name: receipt.fileName || `receipt_${txHash}.pdf`,
+        keyvalues: {
+          txHash,
+          owner: receipt.owner,
+          actor,
+          role,
+          source: "repin",
+        },
+      },
+    };
+
+    await axios.post("https://api.pinata.cloud/pinning/pinByHash", body, {
+      headers: {
+        Authorization: `Bearer ${pinataJWT}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 30_000,
+    });
+
+    logger.info("Repin success (pinByHash)", { txHash, cid, actor, role });
+
+    return {
+      cid,
+      pinned: true,
+      pinProvider: PIN_PROVIDER,
+      method: "pinByHash",
+    };
+  } catch (error) {
+    const status = error?.response?.status;
+    const data = error?.response?.data;
+
+    const paidOnly = data?.error?.reason === "PAID_FEATURE_ONLY";
+    const forbidden = status === 401 || status === 403;
+
+    // 2) Nếu bị giới hạn plan → fallback: tải nội dung CID rồi pinFileToIPFS
+    if (status === 403 && paidOnly) {
+      logger.warn("pinByHash not allowed on current plan. Fallback to pinFileToIPFS", {
+        txHash,
+        cid,
+      });
+
+      const tmp = await downloadCidToTemp(cid);
+      try {
+        const up = await uploadToIPFS(tmp, `repin_${cid}.bin`);
+        const same = up.cid === cid;
+
+        logger.info("Repin success (fallback pinFileToIPFS)", {
+          txHash,
+          origCid: cid,
+          newCid: up.cid,
+          same,
+        });
+
+        return {
+          cid: up.cid,
+          pinned: true,
+          pinProvider: `${PIN_PROVIDER} (fallback pinFile)`,
+          method: "pinFileToIPFS",
+          cidUnchanged: same,
+        };
+      } finally {
+        try {
+          if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+        } catch {}
+      }
+    }
+
+    // 3) Bubble các lỗi khác
+    logger.error("Repin failed (Pinata)", {
+      txHash,
+      cid,
+      status,
+      message: error?.message,
+      response: data,
+    });
+
+    if (status === 429) {
+      const e = new Error("Rate limited by pinning service");
+      e.code = "RATE_LIMITED";
+      e.status = 429;
+      e.details = data;
+      throw e;
+    }
+    if (forbidden) {
+      const e = new Error("Forbidden by pinning service");
+      e.code = "FORBIDDEN";
+      e.status = status;
+      e.details = data;
+      throw e;
+    }
+
+    error.status = status || 500;
+    error.details = data;
+    throw error;
+  }
+};
+
+/* =========================
+ * ✅ NEW (Yêu cầu 7): Gỡ biên lai theo txHash (Admin)
+ * - Unpin trên Pinata (không ném lỗi nếu 404 pin not found)
+ * - Nếu RECEIPT_DELETE_MODE = 'delete' → xoá DB
+ * - Ngược lại → giữ record, đánh dấu status = FAILED + metadata.adminRemoved
+ * =========================
+ */
+
+/** Unpin Pinata, không throw nếu 404 (pin không tồn tại) */
+const tryUnpinOnPinata = async (cid) => {
+  try {
+    await axios.delete(`https://api.pinata.cloud/pinning/unpin/${cid}`, {
+      headers: { Authorization: `Bearer ${pinataJWT}` },
+      timeout: 20_000,
+    });
+    return { ok: true };
+  } catch (err) {
+    const status = err?.response?.status;
+    if (status === 404) return { ok: true, note: "pin_not_found" }; // coi như hợp lệ
+    return {
+      ok: false,
+      status,
+      reason: "pinata_unpin_failed",
+      detail: err?.response?.data || err.message,
+    };
+  }
+};
+
+/** Gỡ biên lai theo txHash: unpin + delete/flag DB */
+const removeReceiptByTxHash = async (txHash, { actor = "unknown", role = "unknown" } = {}) => {
+  if (!isValidTxHash(txHash)) {
+    const err = new Error("Invalid txHash format");
+    err.code = "BAD_REQUEST";
+    throw err;
+  }
+
+  const tx = txHash.toLowerCase();
+  const record = await Receipt.findByTxHash(tx);
+  if (!record) {
+    return { code: "NOT_FOUND" };
+  }
+
+  // 1) Unpin trên Pinata (nếu provider hỗ trợ)
+  let unpinNote = "unpin_skipped";
+  if (PIN_PROVIDER === "pinata") {
+    const unpin = await tryUnpinOnPinata(record.cid);
+    if (!unpin.ok) {
+      const msg = `[Receipt] Unpin failed: ${record.cid} – ${unpin.reason} ${unpin.status || ""}`;
+      logger?.warn ? logger.warn(msg, unpin.detail || "") : console.warn(msg, unpin.detail || "");
+      unpinNote = "unpin_failed_pinata";
+    } else {
+      unpinNote = unpin.note === "pin_not_found" ? "pin_not_found" : "unpinned";
+    }
+  }
+
+  // 2) Xử lý DB theo chế độ
+  let note = "";
+  if (RECEIPT_DELETE_MODE === "delete") {
+    await Receipt.deleteOne({ _id: record._id });
+    note = `${unpinNote}; db_deleted`;
+  } else {
+    record.status = "FAILED";
+    record.metadata = {
+      ...(record.metadata || {}),
+      adminRemoved: true,
+      removedAt: new Date().toISOString(),
+      removedBy: actor,
+      removedByRole: role,
+    };
+    await record.save();
+    note = `${unpinNote}; db_kept_status_FAILED`;
+  }
+
+  const warning =
+    "Lưu ý: file có thể vẫn truy cập được qua public IPFS gateway nếu đã được các node khác cache/repin.";
+
+  logger.info("Receipt removed", {
+    txHash: tx,
+    mode: RECEIPT_DELETE_MODE,
+    note,
+    actor,
+    role,
+  });
+
+  return {
+    code: "OK",
+    txHash: tx,
+    note,
+    warning,
+  };
+};
+
+module.exports = {
+  // public methods
+  uploadToIPFS,
+  generateAndUploadReceipt,
+  verifyReceiptIntegrity,
+  findByTxHash,
+  listByUser,
+  getDownloadUrl,
+  repinByTxHash, // ✅ yêu cầu 6
+  removeReceiptByTxHash, // ✅ yêu cầu 7
+
+  // for tests
+  generateReceiptPDF,
+  generateMetadataJSON,
+
+  // optional export nếu muốn test riêng
+  // downloadCidToTemp,
+};
