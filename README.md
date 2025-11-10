@@ -10,7 +10,7 @@ Repository này tích hợp **Smart Contracts** và **Backend API** để đồn
 - **Kiến trúc Clean** chia tách rõ ràng: **middleware / controller / model / service / listener / config**
 - **REST API** cho Orders, Receipts, Transactions, Settings, Admin
 - **EIP‑712 authentication** (không mật khẩu; nonces an toàn chống replay)
-- **Multichain** registry (Sepolia, Polygon Amoy) với **timeout / retry / fallback RPC**
+- **Multichain** registry (Sepolia, Polygon Amoy, BSC Testnet) với **timeout / retry / fallback RPC**
 - **Event listeners** idempotent cho mỗi chain
 - **IPFS receipts** với mapping `txHash ↔ CID`
 - **MongoDB + Mongoose** với indexing phù hợp
@@ -105,6 +105,7 @@ MONGO_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/evm-multich
 # --- RPC PROVIDERS ---
 RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/<YOUR_ALCHEMY_KEY>
 RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/<YOUR_ALCHEMY_KEY>
+RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
 
 # --- WALLET / DEPLOYER ---
 PRIVATE_KEY=0xYOUR_METAMASK_PRIVATE_KEY   # ⚠️ Chỉ dùng ví testnet!
@@ -112,10 +113,13 @@ PRIVATE_KEY=0xYOUR_METAMASK_PRIVATE_KEY   # ⚠️ Chỉ dùng ví testnet!
 # --- SMART CONTRACT ADDRESSES (sau khi deploy) ---
 LIMIT_ORDER_ADDRESS_SEPOLIA=0x...
 LIMIT_ORDER_ADDRESS_POLYGON=0x...
+LIMIT_ORDER_ADDRESS_BSC_TESTNET=0x...
 TRADE_TOKEN_ADDRESS_SEPOLIA=0x...
 TRADE_TOKEN_ADDRESS_POLYGON=0x...
+TRADE_TOKEN_ADDRESS_BSC_TESTNET=0x...
 STAKING_REWARD_ADDRESS_SEPOLIA=0x...
 STAKING_REWARD_ADDRESS_POLYGON=0x...
+STAKING_REWARD_ADDRESS_BSC_TESTNET=0x...
 
 # --- IPFS STORAGE ---
 IPFS_PROVIDER=web3storage
@@ -126,9 +130,10 @@ CORS_ORIGIN=http://localhost:3000
 RATE_LIMIT=60
 LOG_LEVEL=info
 
-# --- ETHERSCAN / POLYGONSCAN (để verify contracts) ---
+# --- ETHERSCAN / POLYGONSCAN / BSCSCAN (để verify contracts) ---
 ETHERSCAN_API_KEY=XXXXXXXXXXXXXX
 POLYGONSCAN_API_KEY=XXXXXXXXXXXXXX
+BSCSCAN_API_KEY=XXXXXXXXXXXXXX
 ```
 
 ## 📋 Hướng Dẫn Lấy Environment Variables
@@ -263,6 +268,28 @@ RPC_POLYGON_AMOY=https://rpc-amoy.polygon.technology
 RPC_POLYGON_AMOY=https://polygon-amoy.drpc.org
 ```
 
+#### `RPC_BSC_TESTNET` (Binance Smart Chain Testnet)
+```bash
+RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
+```
+
+**BSC Testnet RPC:**
+
+**RPC miễn phí (khuyên dùng):**
+```bash
+# Binance official RPC (khuyên dùng)
+RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
+
+# Alternative endpoints
+RPC_BSC_TESTNET=https://data-seed-prebsc-2-s1.binance.org:8545/
+RPC_BSC_TESTNET=https://data-seed-prebsc-1-s2.binance.org:8545/
+
+# Hoặc nodereal.io (miễn phí)
+RPC_BSC_TESTNET=https://bsc-testnet.nodereal.io/v1/e9a36765eb8a40b9bd12e680a1fd2bc5
+```
+
+**Lưu ý**: BSC Testnet có nhiều RPC endpoints miễn phí và ổn định, không cần API key từ Alchemy/Infura.
+
 ---
 
 ### 👛 **4. Wallet (Testnet Account)**
@@ -314,6 +341,12 @@ PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
    - Chọn "Polygon Amoy Testnet"
    - Nhập địa chỉ ví → Click "Submit"
    - Chờ 1-5 phút để nhận MATIC
+
+   **BSC Testnet BNB**:
+   - Truy cập: [https://testnet.bnbchain.org/faucet-smart](https://testnet.bnbchain.org/faucet-smart)
+   - Nhập địa chỉ ví → Click "Give me BNB"
+   - Hoặc: [https://testnet.binance.org/faucet-smart](https://testnet.binance.org/faucet-smart)
+   - Chờ 1-5 phút để nhận BNB testnet
 
 3. **Export Private Key của ví testnet mới** (theo bước 2 ở trên)
 
@@ -464,6 +497,31 @@ POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123
    POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123EFG456
    ```
 
+#### `BSCSCAN_API_KEY`
+```bash
+BSCSCAN_API_KEY=EFG456HIJ789KLM012NOP345QRS678
+```
+
+**Cách lấy BSCScan API Key:**
+
+1. **Đăng ký BSCScan**:
+   - Truy cập: [https://bscscan.com/register](https://bscscan.com/register)
+   - Điền thông tin → Click "Create Account"
+   - Xác nhận email
+
+2. **Tạo API Key**:
+   - Đăng nhập → Click **"My Account"** (góc trên bên phải)
+   - Vào tab **"API-KEYs"**
+   - Click **"Add"** để tạo API key mới
+   - Đặt tên (ví dụ: "Development")
+   - Click "Create"
+   - Copy **API Key Token**
+
+3. **Paste vào .env**:
+   ```bash
+   BSCSCAN_API_KEY=EFG456HIJ789KLM012NOP345QRS678TUV901
+   ```
+
 **Lưu ý**: API keys này chỉ cần khi bạn muốn verify contracts trên explorer. Có thể để trống nếu không cần verify.
 
 ---
@@ -535,6 +593,7 @@ MONGODB_URI=mongodb+srv://npthanhnhan2003:123456NTN@cluster0.s1cw26e.mongodb.net
 # ===== RPC (EVM Testnets) =====
 RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/abc123def456ghi789jkl012mno345pqr678
 RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/xyz789uvw456rst123tuv456wxy789
+RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
 
 # ===== Wallet (Testnet Account) =====
 PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
@@ -542,6 +601,7 @@ PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
 # ===== Smart Contract Addresses (sẽ có sau khi deploy) =====
 LIMIT_ORDER_ADDRESS_SEPOLIA=
 LIMIT_ORDER_ADDRESS_POLYGON=
+LIMIT_ORDER_ADDRESS_BSC_TESTNET=
 
 # ===== IPFS Storage =====
 IPFS_PROVIDER=web3storage
@@ -550,6 +610,7 @@ IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjpleGFtcG
 # ===== Verify (optional for deploy scripts) =====
 ETHERSCAN_API_KEY=ABC123XYZ789DEF456GHI012JKL345MNO678
 POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123EFG456
+BSCSCAN_API_KEY=EFG456HIJ789KLM012NOP345QRS678TUV901
 
 # ===== Rate Limiting =====
 RATE_LIMIT_WINDOW_MS=900000
@@ -588,6 +649,9 @@ npx hardhat run scripts/deploy.js --network sepolia
 
 # Deploy lên Polygon Amoy
 npx hardhat run scripts/deploy.js --network polygonAmoy
+
+# Deploy lên BSC Testnet
+npx hardhat run scripts/deploy.js --network bscTestnet
 
 # Cập nhật contract addresses vào .env
 ```
@@ -656,7 +720,7 @@ npm start
 
 ## 🌐 Multichain & Chain Registry
 
-- `backend/config/chains.js` export **array các chains được enable** (Sepolia, Polygon Amoy)
+- `backend/config/chains.js` export **array các chains được enable** (Sepolia, Polygon Amoy, BSC Testnet)
 - Mỗi chain có: chainId, name, RPC endpoints, explorer, contract addresses
 - Auto-detect enabled chains dựa trên RPC configuration
 - Explorer helpers tạo links cho tx/address theo từng chain
@@ -684,6 +748,9 @@ npx hardhat run scripts/deploy.js --network sepolia
 
 # Deploy lên Polygon Amoy  
 npx hardhat run scripts/deploy.js --network polygonAmoy
+
+# Deploy lên BSC Testnet
+npx hardhat run scripts/deploy.js --network bscTestnet
 
 # Verify contracts
 npx hardhat run scripts/verify.js --network sepolia

@@ -35,6 +35,19 @@ const chains = [
       stakingReward: process.env.STAKING_REWARD_ADDRESS_POLYGON || '',
     },
   },
+  {
+    chainId: 97,
+    name: 'BSC Testnet',
+    symbol: 'tBNB',
+    rpc: process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/',
+    explorer: 'https://testnet.bscscan.com',
+    explorerApiKey: process.env.BSCSCAN_API_KEY || '',
+    contracts: {
+      limitOrder: process.env.LIMIT_ORDER_ADDRESS_BSC_TESTNET || '',
+      tradeToken: process.env.TRADE_TOKEN_ADDRESS_BSC_TESTNET || '',
+      stakingReward: process.env.STAKING_REWARD_ADDRESS_BSC_TESTNET || '',
+    },
+  },
 ];
 
 /**
@@ -73,7 +86,7 @@ function validateChainConfigs() {
   const enabledChains = getEnabledChains();
   
   if (enabledChains.length === 0) {
-    console.warn('⚠️  Warning: No chains enabled. Configure RPC_SEPOLIA or RPC_POLYGON_AMOY');
+    console.warn('⚠️  Warning: No chains enabled. Configure RPC_SEPOLIA, RPC_POLYGON_AMOY, or RPC_BSC_TESTNET');
     return;
   }
   
