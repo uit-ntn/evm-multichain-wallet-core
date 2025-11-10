@@ -15,12 +15,8 @@ if (authController && typeof authController.nonce === 'function') {
 	router.post('/nonce', (req, res) => res.status(501).json({ message: 'Nonce handler not implemented' }));
 }
 
-if (authController && typeof authController.login === 'function') {
-	router.post('/login', authController.login);
-} else {
-	console.warn('Auth controller missing handler: login');
-	router.post('/login', (req, res) => res.status(501).json({ message: 'Login handler not implemented' }));
-}
+// Login route - redirect to verify for Web3 authentication
+router.post('/login', authController.verify);
 
 if (authController && typeof authController.verify === 'function') {
 	router.post('/verify', authController.verify);

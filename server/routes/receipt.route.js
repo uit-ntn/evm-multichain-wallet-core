@@ -5,10 +5,9 @@
 
 const express = require('express');
 const router = express.Router();
-const receiptController = require('../controllers/receiptController');
 const multer = require("multer");
 const path = require("path");
-const { uploadReceipt } = require("../controllers/receipt.controller");
+const { uploadReceipt } = require("../controllers/receiptController");
 const { defaultRateLimit } = require("../middlewares/rateLimiter");
 
 // Cấu hình lưu file tạm
