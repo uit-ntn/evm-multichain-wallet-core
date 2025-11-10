@@ -29,14 +29,11 @@ module.exports = {
       chainId: 80002,
     },
   },
-  
+
   etherscan: {
-    apiKey: {
-      sepolia: process.env.ETHERSCAN_API_KEY || "",
-      polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
-    },
+    apiKey: process.env.ETHERSCAN_API_KEY,
   },
-  
+
   paths: {
     sources: "./contracts",
     tests: "./test",
