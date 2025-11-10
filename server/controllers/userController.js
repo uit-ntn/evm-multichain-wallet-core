@@ -1,109 +1,58 @@
 /**
- * User Controller
+ * User Controller (CommonJS)
  * Xử lý các HTTP requests liên quan đến user
  */
 
 const userService = require("../services/user.service");
+const { logger } = require("../adapters/logger.adapter");
 
-/**
- * GET /api/users/:address
- * Lấy chi tiết user theo địa chỉ ví
- * Auth: PUBLIC
- */
-const getUser = async (req, res) => {
+async function getAllUsers(req, res) {
   try {
-    const { address } = req.params;
-
-    // Kiểm tra định dạng địa chỉ ví
-    const addrRegex = /^0x[a-fA-F0-9]{40}$/;
-    if (!addrRegex.test(address)) {
-      return res.status(400).json({ message: "Invalid address format" });
+    // 401 Unauthorized – thiếu JWT
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized: Missing or invalid token" });
     }
 
-    const user = await userService.getUserByAddress(address);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    // 403 Forbidden – không phải admin
+    if (!req.user.isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
     }
 
-    return res.status(200).json(user);
+    // Phân trang (pagination)
+    let { page = 1, limit = 20 } = req.query;
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+
+    // 400 Bad Request – tham số phân trang sai
+    if (
+      isNaN(page) ||
+      isNaN(limit) ||
+      page < 1 ||
+      limit < 1 ||
+      !Number.isInteger(page) ||
+      !Number.isInteger(limit) ||
+      limit > 100
+    ) {
+      return res.status(400).json({ error: "Bad Request: Invalid pagination parameters" });
+    }
+
+    // 429 Too Many Requests – Giả lập (nếu có middleware limit)
+    if (req.tooManyRequests) {
+      return res.status(429).json({ error: "Too Many Requests: Rate limit exceeded" });
+    }
+
+    // Lấy dữ liệu người dùng với phân trang
+    const users = await userService.getAllUsers({ page, limit });
+
+    // 200 OK – Trả danh sách
+    return res.status(200).json(users);
   } catch (error) {
-    console.error("User get error:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    logger.error("Error getting all users", { error: error.message });
+    // 500 Internal Server Error
+    return res.status(500).json({ error: "Internal server error" });
   }
+}
+
+module.exports = {
+  getAllUsers,
 };
-
-/**
- * PATCH /api/users/display-name
- * Cập nhật tên hiển thị (ENS/custom)
- * Auth: JWT REQUIRED
- */
-const updateDisplayName = async (req, res) => {
-  try {
-    const { address, displayName } = req.body;
-    const user = req.user; // Lấy thông tin user từ middleware verifyJWT
-
-    // Kiểm tra quyền truy cập (chỉ chủ ví mới được cập nhật)
-    if (!user || user.address.toLowerCase() !== address.toLowerCase()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const result = await userService.updateDisplayName(address, displayName);
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Update displayName error:", error.message);
-
-    // Phân loại lỗi theo rubric
-    if (error.message.includes("empty"))
-      return res.status(400).json({ message: error.message });
-    if (error.message.includes("Invalid"))
-      return res.status(422).json({ message: error.message });
-    if (error.message.includes("too long"))
-      return res.status(400).json({ message: error.message });
-    if (error.message === "User not found")
-      return res.status(404).json({ message: "User not found" });
-
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-/**
- * PATCH /api/users/role
- * Đổi vai trò user (ADMIN only)
- * Auth: JWT REQUIRED (role = admin)
- */
-const updateUserRole = async (req, res) => {
-  try {
-    const { address, role } = req.body;
-    const requester = req.user; // Lấy thông tin từ token
-
-    // 1️⃣ Kiểm tra đăng nhập
-    if (!requester) {
-      return res.status(401).json({ message: "Missing JWT" });
-    }
-
-    // 2️⃣ Kiểm tra quyền admin
-    if (requester.role !== "admin") {
-      return res.status(403).json({ message: "Forbidden: Admin only" });
-    }
-
-    // 3️⃣ Gọi service để đổi role
-    const result = await userService.updateUserRole(
-      requester.address,
-      address,
-      role
-    );
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Update user role error:", error.message);
-
-    if (error.message.includes("Invalid role"))
-      return res.status(400).json({ message: error.message });
-    if (error.message === "User not found")
-      return res.status(404).json({ message: error.message });
-
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-module.exports = { getUser, updateDisplayName, updateUserRole };

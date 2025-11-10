@@ -1,10 +1,15 @@
-/**
- * Order Routes
- * Định nghĩa các routes cho limit orders
- */
+const express = require("express");
+const { orderController } = require("../controllers/orderController");
 
-const express = require('express');
 const router = express.Router();
-const orderController = require('../controllers/orderController');
+
+router.post("/", orderController.create);
+router.post("/validate-signature", orderController.validateSignature);
+router.get("/", orderController.list);
+router.get("/:id", orderController.getById);
+router.patch("/:id", orderController.update);
+router.patch("/:id/cancel", orderController.cancel);
+router.patch("/:id/expire", orderController.expire);
+router.delete("/:id", orderController.delete);
 
 module.exports = router;
