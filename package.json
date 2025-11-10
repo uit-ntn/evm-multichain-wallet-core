@@ -22,7 +22,6 @@
   "license": "MIT",
   "dependencies": {
     "@mysten/sui.js": "^0.45.1",
-    "@openzeppelin/contracts": "^5.4.0",
     "axios": "^1.5.0",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
@@ -42,6 +41,7 @@
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@nomiclabs/hardhat-waffle": "^2.0.6",
+    "@openzeppelin/contracts": "^4.9.5",
     "chai": "^6.2.0",
     "ethereum-waffle": "^4.0.10",
     "hardhat": "^2.26.5",
