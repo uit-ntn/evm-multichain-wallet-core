@@ -4,6 +4,8 @@ const helmet = require("helmet");
 const compression = require("compression");
 
 const { config: appConfig, initConfig } = require("./adapters/config.adapter");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./swagger");
 const {
   logger,
   httpLogger,
@@ -55,6 +57,9 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/transactions", transactionRoutes); // <--- THÊM DÒNG NÀY
 app.use("/api/tx", transactionRoutes);           // <--- THÊM DÒNG NÀY (Alias ngắn)
 
+// Swagger UI and raw JSON
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/api-docs.json", (req, res) => res.json(swaggerSpec));
 app.use(notFound);
 app.use(errorHandler);
 

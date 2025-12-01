@@ -45,27 +45,130 @@ const deleteLimiter = rateLimit({
 
 // === Routes ===
 
-// Upload file PDF/JSON lên IPFS (multipart/form-data, field: "files")
+/**
+ * @openapi
+ * /api/receipts:
+ *   post:
+ *     tags:
+ *       - Receipts
+ *     summary: Upload receipt files (multipart/form-data)
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               files:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *     responses:
+ *       201:
+ *         description: Files uploaded and receipts created
+ */
 router.post('/', authJwt, upload.array('files', 5), receiptController.uploadReceipts);
 
-// Sinh PDF + JSON → upload IPFS + lưu DB
+/**
+ * @openapi
+ * /api/receipts/generate:
+ *   post:
+ *     tags:
+ *       - Receipts
+ *     summary: Generate receipt (PDF + JSON) and upload to IPFS
+ *     responses:
+ *       201:
+ *         description: Generated receipt
+ */
 router.post('/generate', authJwt, receiptController.generateReceipt);
 
-// Xác minh checksum SHA256 nội dung IPFS (PUBLIC/JWT)
+/**
+ * @openapi
+ * /api/receipts/verify/{txHash}:
+ *   get:
+ *     tags:
+ *       - Receipts
+ *     summary: Verify receipt checksum by txHash
+ *     parameters:
+ *       - in: path
+ *         name: txHash
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Verification result
+ */
 router.get('/verify/:txHash', optionalJwt, receiptController.verifyReceipt);
 
-// ✅ Danh sách biên lai theo user (JWT) + phân trang
-// GET /api/receipts/user/:address?page=1&pageSize=20
+/**
+ * @openapi
+ * /api/receipts/user/{address}:
+ *   get:
+ *     tags:
+ *       - Receipts
+ *     summary: Get receipts by user address
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Returns paginated receipts
+ */
 router.get('/user/:address', authJwt, receiptController.getByUser);
 
-// ✅ Re-pin/refresh (ADMIN/SERVICE) — POST /api/receipts/refresh
+/**
+ * @openapi
+ * /api/receipts/refresh:
+ *   post:
+ *     tags:
+ *       - Receipts
+ *     summary: Refresh/re-pin receipts (admin/service)
+ *     responses:
+ *       200:
+ *         description: Refresh started
+ */
 router.post('/refresh', authJwt, requireAdminOrService, receiptController.refreshReceipt);
 
-// ✅ URL tải file (pdf) – 200 {url} hoặc 302 redirect (JWT)
-// GET /api/receipts/:txHash/download?type=pdf&redirect=1
+/**
+ * @openapi
+ * /api/receipts/{txHash}/download:
+ *   get:
+ *     tags:
+ *       - Receipts
+ *     summary: Download receipt file (PDF)
+ *     parameters:
+ *       - in: path
+ *         name: txHash
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Returns file URL or redirect
+ */
 router.get('/:txHash/download', authJwt, receiptController.downloadReceipt);
 
-// ✅ DELETE (ADMIN) — gỡ biên lai (unpin + xoá/đánh dấu theo config)
+/**
+ * @openapi
+ * /api/receipts/{txHash}:
+ *   delete:
+ *     tags:
+ *       - Receipts
+ *     summary: Delete/unpin a receipt (admin)
+ *     parameters:
+ *       - in: path
+ *         name: txHash
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       204:
+ *         description: Receipt deleted
+ */
 router.delete('/:txHash', authJwt, requireAdmin, deleteLimiter, receiptController.deleteReceipt);
 
 // Lấy receipt theo txHash (JWT) – đặt CUỐI để không “ăn” route /user/:address và /:txHash/download

@@ -1,10 +1,10 @@
 # Hợp Đồng Thông Minh
 
-Hợp đồng thông minh Solidity cho Ví Đa Chuỗi EVM với Lệnh Giới Hạn và biên lai IPFS.
+Hợp đồng thông minh Solidity cho Ví Đa Chuỗi EVM với Lệnh Giới Hạn, Staking, và Tích Hợp DEX.
 
 ## 📁 Hợp Đồng
 
-###  **LimitOrder.sol**
+### **LimitOrder.sol**
 Hợp đồng chính cho chức năng lệnh giới hạn.
 
 **Tính Năng:**
@@ -52,274 +52,421 @@ function cancelOrder(uint256 orderId) external;
 function getOrder(uint256 orderId) external view returns (Order memory);
 ```
 
-###  **TradeToken.sol** (TODO)
-Token ERC20 để kiểm tra chức năng giao dịch.
+### **DexAdapterV2.sol**
+Adapter cho tích hợp DEX V2 (Uniswap V2, SushiSwap, PancakeSwap).
 
-###  **StakingRewards.sol** (TODO)
+**Tính Năng:**
+- Tương tác với DEX V2 protocols
+- Quản lý approval và swap tokens
+- Tối ưu hóa gas cho giao dịch
+- Kiểm tra slippage và deadline
+
+### **DexAdapterV3.sol**
+Adapter cho tích hợp DEX V3 (Uniswap V3).
+
+**Tính Năng:**
+- Hỗ trợ concentrated liquidity
+- Tối ưu hóa phí giao dịch
+- Xử lý tick ranges
+- Quản lý nâng cao slippage
+
+### **TradeToken.sol**
+Token ERC20 của protocol với tính năng vesting và phí.
+
+**Tính Năng:**
+- Token quản trị và phần thưởng
+- Vesting theo lịch trình
+- Thu phí giao dịch tùy chỉnh
+- Blacklist và whitelist
+
+### **StakingRewards.sol**
 Cơ chế staking với phân phối phần thưởng.
 
-###  **SystemAdmin.sol** (TODO)
-Chức năng quản trị như tạm dừng/tiếp tục hệ thống.
+**Tính Năng:**
+- Staking dựa trên epoch
+- Phân phối phần thưởng linh hoạt
+- Cooldown và unstaking delays
+- Boost rewards cho long-term stakers
 
-###  **ReceiptGenerator.sol** (TODO)
-Tạo biên lai cho giao dịch.
+### **SystemAdmin.sol**
+Hệ thống quản trị và bảo mật protocol.
 
-###  **DexAdapterV2.sol** (TODO)
-Adapter cho tích hợp DEX (Uniswap, SushiSwap, v.v.).
+**Tính Năng:**
+- Tạm dừng/tiếp tục khẩn cấp
+- Quản lý quyền admin đa cấp
+- Cập nhật cấu hình protocol
+- Quản lý danh sách contracts
 
-###  **SwapRouterProxy.sol** (TODO)
-Proxy cho hoạt động swap với nhiều DEX.
+### **SwapRouterProxy.sol**
+Proxy thông minh cho hoạt động swap qua nhiều DEX.
+
+**Tính Năng:**
+- Split và route giao dịch
+- Tìm đường đi tốt nhất
+- Phân chia khối lượng
+- Tối ưu hóa phí giao dịch
 
 ## 🚀 Phát Triển
 
-### Biên Dịch Hợp Đồng
+### Yêu Cầu Hệ Thống
+- Node.js v16+
+- NPM v8+
+- Git
+
+### Cài Đặt
 ```bash
+# Clone repository
+git clone https://github.com/uit-ntn/evm-multichain-wallet-core.git
+cd evm-multichain-wallet-core
+
+# Cài đặt dependencies
+npm install
+
+# Biên dịch contracts
 npx hardhat compile
 ```
 
 ### Triển Khai lên Testnet
 ```bash
-# Sepolia
+# Sepolia Testnet
 npx hardhat run scripts/deploy.js --network sepolia
 
-# Polygon Amoy
+# Polygon Amoy Testnet
 npx hardhat run scripts/deploy.js --network polygonAmoy
+
+# Base Sepolia Testnet
+npx hardhat run scripts/deploy.js --network baseSepolia
 ```
 
 ### Xác Minh trên Explorer
 ```bash
-npx hardhat run scripts/verify.js --network sepolia
+# Xác minh trên Sepolia
+npx hardhat verify --network sepolia DEPLOYED_CONTRACT_ADDRESS [CONSTRUCTOR_ARGS]
+
+# Xác minh trên Polygon Amoy
+npx hardhat verify --network polygonAmoy DEPLOYED_CONTRACT_ADDRESS [CONSTRUCTOR_ARGS]
+
+# Xác minh trên Base Sepolia
+npx hardhat verify --network baseSepolia DEPLOYED_CONTRACT_ADDRESS [CONSTRUCTOR_ARGS]
 ```
 
-### Chạy Kiểm Thử
+### Kiểm Thử
 ```bash
+# Chạy tất cả tests
 npx hardhat test
+
+# Chạy test cụ thể
+npx hardhat test test/LimitOrder.test.js
+
+# Chạy tests với gas report
+REPORT_GAS=true npx hardhat test
+
+# Chạy test coverage
+npx hardhat coverage
 ```
 
 ## 🔧 Cấu Hình
 
-### Mạng Hardhat
-Được cấu hình trong `hardhat.config.js`:
+### Cấu Hình Mạng
+File `hardhat.config.js`:
 
 ```javascript
 networks: {
+  // Ethereum Sepolia
   sepolia: {
     url: process.env.RPC_SEPOLIA,
     accounts: [process.env.PRIVATE_KEY],
     chainId: 11155111,
+    gasPrice: "auto"
   },
+  
+  // Polygon Amoy
   polygonAmoy: {
     url: process.env.RPC_POLYGON_AMOY,
     accounts: [process.env.PRIVATE_KEY],
     chainId: 80002,
+    gasPrice: "auto"
+  },
+  
+  // Base Sepolia
+  baseSepolia: {
+    url: process.env.RPC_BASE_SEPOLIA,
+    accounts: [process.env.PRIVATE_KEY],
+    chainId: 84532,
+    gasPrice: "auto"
   }
 }
 ```
 
 ### Biến Môi Trường
+Tạo file `.env`:
 ```bash
 # RPC Endpoints
 RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
 RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/YOUR_KEY
+RPC_BASE_SEPOLIA=https://sepolia.base.org
 
-# Deployer Wallet
-PRIVATE_KEY=0x...  # Testnet wallet only!
+# Wallet (Chỉ dùng ví testnet!)
+PRIVATE_KEY=0x...
 
-# Explorer API Keys (for verification)
+# API Keys cho xác minh contracts
 ETHERSCAN_API_KEY=ABC123...
 POLYGONSCAN_API_KEY=XYZ789...
-```
+BASESCAN_API_KEY=DEF456...
+
+# Địa chỉ contracts đã deploy
+LIMIT_ORDER_ADDRESS_SEPOLIA=0x...
+DEX_ADAPTER_V2_ADDRESS_SEPOLIA=0x...
+TRADE_TOKEN_ADDRESS_SEPOLIA=0x...
 
 ## 📋 Quy Trình Triển Khai
 
-### 1. Biên Dịch
+### 1. Chuẩn Bị
 ```bash
-npm run compile
+# Cài đặt dependencies
+npm install
+
+# Build contracts
+npm run build
 ```
 
 ### 2. Triển Khai
 ```bash
-# Deploy to Sepolia
+# Deploy theo thứ tự
 npx hardhat run scripts/deploy.js --network sepolia
 
-# Output example:
-# 🚀 Starting deployment...
-# 📡 Network: sepolia
+# Output ví dụ:
+# 🚀 Bắt đầu triển khai...
+# 📡 Mạng: Sepolia
 # 👤 Deployer: 0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
-# 💰 Balance: 0.5 ETH
 # 
-# 📝 Deploying LimitOrder...
-# ✅ LimitOrder deployed to: 0x123456789abcdef123456789abcdef1234567890
-# 
-# ✅ Deployment completed!
-# 📋 Update your .env file:
-# LIMIT_ORDER_ADDRESS_SEPOLIA=0x123456789abcdef123456789abcdef1234567890
+# � Triển khai SystemAdmin...
+# ✅ SystemAdmin deployed: 0xabc...
+#
+# 📝 Triển khai TradeToken...
+# ✅ TradeToken deployed: 0xdef...
+#
+# 📝 Triển khai StakingRewards...
+# ✅ StakingRewards deployed: 0x123...
+#
+# 📝 Triển khai DexAdapterV2...
+# ✅ DexAdapterV2 deployed: 0x456...
+#
+# 📝 Triển khai DexAdapterV3...
+# ✅ DexAdapterV3 deployed: 0x789...
+#
+# 📝 Triển khai LimitOrder...
+# ✅ LimitOrder deployed: 0xabc...
+#
+# � Triển khai SwapRouterProxy...
+# ✅ SwapRouterProxy deployed: 0xdef...
 ```
 
-### 3. Cập Nhật Môi Trường
-Sao chép địa chỉ hợp đồng vào `.env`:
+### 3. Xác Minh
 ```bash
-LIMIT_ORDER_ADDRESS_SEPOLIA=0x123456789abcdef123456789abcdef1234567890
-LIMIT_ORDER_ADDRESS_POLYGON=0xabcdef123456789abcdef123456789abcdef1234
-```
-
-### 4. Xác Minh
-```bash
+# Xác minh từng contract
 npx hardhat run scripts/verify.js --network sepolia
 
-# Output example:
-# 🔍 Starting contract verification...
-# 📡 Network: sepolia
-# 
-# 📝 Verifying LimitOrder at 0x123...
-# ✅ LimitOrder verified!
-# 
-# ✅ Verification completed!
+# Kiểm tra xác minh
+npx hardhat verify-check --network sepolia CONTRACT_ADDRESS
 ```
 
-## 🧪 Kiểm Thử
-
-### Kiểm Thử Đơn Vị
+### 4. Thiết Lập Hệ Thống
 ```bash
-npx hardhat test
+# Cấu hình SystemAdmin
+npx hardhat run scripts/setup/admin.js --network sepolia
 
-# Output example:
-# LimitOrder
-#   Order Creation
-#     ✓ Should create a new order
-#     ✓ Should fail with invalid token addresses
-#   Order Cancellation
-#     ✓ Should cancel an order
-#     ✓ Should fail if not order owner
-#   View Functions
-#     ✓ Should get user orders
+# Khởi tạo DexAdapter
+npx hardhat run scripts/setup/dex.js --network sepolia
+
+# Cấu hình phí và quyền
+npx hardhat run scripts/setup/fees.js --network sepolia
 ```
 
-### Độ Bao Phủ Kiểm Thử
+## 🧪 Testing Framework
+
+### Unit Tests
 ```bash
-npx hardhat coverage
+# Test một contract
+npm test test/LimitOrder.test.js
+npm test test/DexAdapter.test.js
+npm test test/StakingRewards.test.js
+
+# Test tất cả
+npm test
+
+# Test với coverage
+npm run coverage
 ```
 
-### Báo Cáo Gas
+### Integration Tests
 ```bash
-REPORT_GAS=true npx hardhat test
+# Test tích hợp DEX
+npm test test/integration/dex-integration.test.js
+
+# Test tích hợp staking
+npm test test/integration/staking-integration.test.js
+
+# Test hiệu suất
+npm test test/performance/gas-benchmark.test.js
 ```
 
-## 🔍 Tương Tác Hợp Đồng
+## � API & SDK
 
-### Sử Dụng Ethers.js
+### JavaScript SDK
 ```javascript
-const { ethers } = require('ethers');
+const { WalletSDK } = require('@uit-ntn/multichain-wallet-sdk');
 
-// Connect to contract
-const provider = new ethers.JsonRpcProvider(RPC_URL);
-const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+// Khởi tạo SDK
+const sdk = new WalletSDK({
+  rpc: process.env.RPC_URL,
+  chainId: 11155111, // Sepolia
+  privateKey: process.env.PRIVATE_KEY
+});
 
-// Read functions
-const order = await contract.getOrder(orderId);
-const userOrders = await contract.getUserOrders(userAddress);
+// Tạo lệnh giới hạn
+const order = await sdk.limitOrder.create({
+  tokenIn: '0x...',
+  tokenOut: '0x...',
+  amountIn: '1000000000000000000',
+  minAmountOut: '900000000000000000',
+  limitPrice: '1100000000000000000'
+});
 
-// Write functions (need signer)
-const signer = new ethers.Wallet(PRIVATE_KEY, provider);
-const contractWithSigner = contract.connect(signer);
+// Staking
+await sdk.staking.stake('1000000000000000000');
+const rewards = await sdk.staking.getRewards();
 
-const tx = await contractWithSigner.createOrder(
-  tokenIn,
-  tokenOut,
-  amountIn,
-  minAmountOut,
-  limitPrice,
-  deadline
-);
-
-await tx.wait(); // Wait for confirmation
+// Swap tokens
+const quote = await sdk.dex.getQuote({
+  tokenIn: '0x...',
+  tokenOut: '0x...',
+  amountIn: '1000000000000000000'
+});
+await sdk.dex.swap(quote);
 ```
 
-### Sử Dụng Hardhat Console
-```bash
-npx hardhat console --network sepolia
+### GraphQL API
+```graphql
+# Queries
+query GetOrders($user: Address!) {
+  orders(where: { user: $user }) {
+    id
+    tokenIn
+    tokenOut
+    amountIn
+    minAmountOut
+    limitPrice
+    status
+  }
+}
 
-# In console:
-const LimitOrder = await ethers.getContractFactory("LimitOrder");
-const limitOrder = await LimitOrder.attach("0x123...");
-const order = await limitOrder.getOrder(1);
-console.log(order);
+# Subscriptions
+subscription OnOrderFilled($orderId: ID!) {
+  orderFilled(orderId: $orderId) {
+    id
+    amountOut
+    filler
+    timestamp
+  }
+}
 ```
 
-## 📊 Địa Chỉ Hợp Đồng
+## 📊 Contract Addresses
 
 ### Sepolia Testnet
 ```
-LimitOrder:     0x... (update after deployment)
-TradeToken:     0x... (TODO)
-StakingRewards: 0x... (TODO)
-SystemAdmin:    0x... (TODO)
+SystemAdmin:     0x...
+TradeToken:     0x...
+StakingRewards: 0x...
+DexAdapterV2:   0x...
+DexAdapterV3:   0x...
+LimitOrder:     0x...
+SwapRouter:     0x...
 ```
-
-### Polygon Amoy Testnet
-```
-LimitOrder:     0x... (update after deployment)
-TradeToken:     0x... (TODO)
-StakingRewards: 0x... (TODO)
-SystemAdmin:    0x... (TODO)
-```
-
-## 🔗 Liên Kết Explorer
-
-### Sepolia
-- **Explorer**: https://sepolia.etherscan.io
-- **Faucet**: https://sepoliafaucet.com
 
 ### Polygon Amoy
-- **Explorer**: https://amoy.polygonscan.com
-- **Faucet**: https://faucet.polygon.technology
-
-## Mẹo Phát Triển
-
-### Thêm Hợp Đồng Mới
-1. Create `.sol` file trong `contracts/`
-2. Add deployment logic trong `scripts/deploy.js`
-3. Add verification trong `scripts/verify.js`
-4. Write tests trong `test/`
-5. Update contract addresses trong `.env`
-
-### Gỡ Lỗi Giao Dịch
-```bash
-# Get transaction receipt
-npx hardhat run --network sepolia scripts/debug.js
-
-# Or use console
-npx hardhat console --network sepolia
-const tx = await ethers.provider.getTransactionReceipt("0x...");
-console.log(tx);
+```
+SystemAdmin:     0x...
+TradeToken:     0x...
+StakingRewards: 0x...
+DexAdapterV2:   0x...
+DexAdapterV3:   0x...
+LimitOrder:     0x...
+SwapRouter:     0x...
 ```
 
-### Ước Tính Gas
-```javascript
-const gasEstimate = await contract.estimateGas.createOrder(
-  tokenIn,
-  tokenOut,
-  amountIn,
-  minAmountOut,
-  limitPrice,
-  deadline
-);
-console.log(`Estimated gas: ${gasEstimate.toString()}`);
+### Base Sepolia
+```
+SystemAdmin:     0x...
+TradeToken:     0x...
+StakingRewards: 0x...
+DexAdapterV2:   0x...
+DexAdapterV3:   0x...
+LimitOrder:     0x...
+SwapRouter:     0x...
 ```
 
-## Lưu Ý Bảo Mật
+## ⚡ Endpoints & Tools
 
-- ⚠️ **Không bao giờ commit khóa riêng**
-- ⚠️ **Chỉ sử dụng ví testnet** cho phát triển
-- ⚠️ **Kiểm toán hợp đồng** trước khi triển khai mainnet
-- ⚠️ **Kiểm thử kỹ lưỡng** trên testnet trước
-- ⚠️ **Xác minh hợp đồng** trên explorer sau triển khai
+### RPC Endpoints
+- Sepolia: https://rpc.sepolia.org
+- Polygon Amoy: https://rpc-amoy.polygon.technology
+- Base Sepolia: https://sepolia.base.org
 
-## Tài Nguyên
+### Explorers
+- Sepolia: https://sepolia.etherscan.io
+- Polygon Amoy: https://www.oklink.com/amoy
+- Base Sepolia: https://sepolia.basescan.org
 
-- [Hardhat Documentation](https://hardhat.org/docs)
-- [Ethers.js Documentation](https://docs.ethers.org/v6/)
-- [Solidity Documentation](https://docs.soliditylang.org/)
-- [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)
+### Development Tools
+- **Testnet Faucets:**
+  - Sepolia: https://sepoliafaucet.com
+  - Polygon: https://faucet.polygon.technology
+  - Base: https://www.coinbase.com/faucets/base-sepolia-faucet
+
+- **Token Lists:**
+  - Uniswap: https://tokens.uniswap.org
+  - Sushiswap: https://tokens.sushi.com
+
+## 🔒 Security & Best Practices
+
+### Smart Contract Security
+- ✅ Sử dụng OpenZeppelin contracts đã audit
+- ✅ Implement các security patterns chuẩn
+- ✅ Kiểm tra tràn số và phân quyền
+- ✅ Sử dụng SafeMath và SafeERC20
+- ✅ Cập nhật dependency thường xuyên
+
+### Deployment Security
+- ⚠️ Không commit private keys
+- ⚠️ Chỉ dùng ví testnet cho development
+- ⚠️ Audit code trước khi lên mainnet
+- ⚠️ Verify tất cả contracts trên explorer
+- ⚠️ Test kỹ trên testnet trước
+
+### Gas Optimization
+- ⚡ Tối ưu storage slots
+- ⚡ Sử dụng batch operations
+- ⚡ Cache external calls
+- ⚡ Dùng assembly cho tính toán phức tạp
+- ⚡ Optimize function selectors
+
+## 📚 Resources & Links
+
+### Documentation
+- [Project Documentation](https://docs.uit-ntn.dev)
+- [API Reference](https://api.uit-ntn.dev)
+- [SDK Guide](https://sdk.uit-ntn.dev)
+
+### Tools & Libraries
+- [Hardhat](https://hardhat.org)
+- [OpenZeppelin](https://openzeppelin.com)
+- [Ethers.js](https://docs.ethers.org/v6)
+
+### Community
+- [Discord](https://discord.gg/uit-ntn)
+- [Telegram](https://t.me/uit_ntn)
+- [Twitter](https://twitter.com/uit_ntn)
 
 ---

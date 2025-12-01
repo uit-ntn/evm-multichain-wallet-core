@@ -24,4 +24,11 @@ router.get('/tx/:txHash', txController.detail);
 // [5] Xóa
 router.delete('/:txHash', txController.delete);
 
+/**
+ * @openapi
+ * tags:
+ *   - name: Transactions
+ *     description: Transaction related endpoints
+ */
+
 module.exports = router;

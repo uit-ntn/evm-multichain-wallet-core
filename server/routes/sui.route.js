@@ -1,3 +1,10 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: Sui
+ *     description: Sui network helper endpoints
+ */
+
 // const express = require('express');
 // const router = express.Router();
 // const suiService = require('../services/suiService');
