@@ -7,4 +7,11 @@ const express = require('express');
 const router = express.Router();
 const transactionController = require('../controllers/transactionController');
 
+/**
+ * @openapi
+ * tags:
+ *   - name: Transactions
+ *     description: Transaction related endpoints
+ */
+
 module.exports = router;

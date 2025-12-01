@@ -1,5 +1,5 @@
-import hre from "hardhat";
-import dotenv from "dotenv";
+const hre = require("hardhat");
+const dotenv = require("dotenv");
 
 dotenv.config();
 
