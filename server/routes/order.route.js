@@ -1,9 +1,27 @@
+const express = require('express');
 const express = require("express");
 const { orderController } = require("../controllers/orderController");
 
 
 const router = express.Router();
+// Import trực tiếp (vì bên controller đã export trực tiếp)
+const orderController = require('../controllers/orderController');
 
+// Debug log để kiểm tra (sẽ hiện trong terminal khi chạy lại)
+console.log("Loaded OrderController:", orderController);
+
+// Nguyên phụ trách:
+router.post('/', orderController.create);
+router.post('/fill', orderController.fill);
+
+// Các route của An (Placeholder - Giữ lại để code không lỗi)
+router.get('/', orderController.list);
+router.get('/:id', orderController.getById);
+router.patch('/:id', orderController.update);
+router.patch('/:id/cancel', orderController.cancel);
+router.patch('/:id/expire', orderController.expire);
+router.delete('/:id', orderController.delete);
+router.post('/validate-signature', orderController.validateSignature);
 /**
  * @openapi
  * /api/orders:
@@ -15,7 +33,6 @@ const router = express.Router();
  *       201:
  *         description: Order created
  */
-router.post("/", orderController.create);
 
 /**
  * @openapi
@@ -28,7 +45,6 @@ router.post("/", orderController.create);
  *       200:
  *         description: Signature valid
  */
-router.post("/validate-signature", orderController.validateSignature);
 
 /**
  * @openapi
@@ -41,7 +57,6 @@ router.post("/validate-signature", orderController.validateSignature);
  *       200:
  *         description: Returns list of orders
  */
-router.get("/", orderController.list);
 
 /**
  * @openapi
@@ -60,7 +75,6 @@ router.get("/", orderController.list);
  *       200:
  *         description: Order object
  */
-router.get("/:id", orderController.getById);
 
 /**
  * @openapi
@@ -73,7 +87,6 @@ router.get("/:id", orderController.getById);
  *       200:
  *         description: Updated order
  */
-router.patch("/:id", orderController.update);
 
 /**
  * @openapi
@@ -86,7 +99,6 @@ router.patch("/:id", orderController.update);
  *       200:
  *         description: Order cancelled
  */
-router.patch("/:id/cancel", orderController.cancel);
 
 /**
  * @openapi
@@ -99,7 +111,6 @@ router.patch("/:id/cancel", orderController.cancel);
  *       200:
  *         description: Order expired
  */
-router.patch("/:id/expire", orderController.expire);
 
 /**
  * @openapi
@@ -112,6 +123,5 @@ router.patch("/:id/expire", orderController.expire);
  *       204:
  *         description: Order deleted
  */
-router.delete("/:id", orderController.delete);
 
 module.exports = router;
