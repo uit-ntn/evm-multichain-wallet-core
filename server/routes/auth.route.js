@@ -19,6 +19,18 @@ const limiter = rateLimit({
 // (Tuỳ chọn) endpoint kiểm tra router đã mount
 router.get("/__ping", (req, res) => res.json({ ok: true, scope: "auth" }));
 
+/**
+ * @openapi
+ * /api/auth/nonce:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Request a nonce for web3 authentication
+ *     responses:
+ *       200:
+ *         description: Returns nonce
+ */
+
 // ===== Nonce =====
 if (authController?.nonce) {
   router.post("/nonce", limiter, authController.nonce);
@@ -31,6 +43,17 @@ if (authController?.nonce) {
 
 // ===== Verify =====
 if (authController?.verify) {
+  /**
+   * @openapi
+   * /api/auth/verify:
+   *   post:
+   *     tags:
+   *       - Auth
+   *     summary: Verify signature and issue JWT
+   *     responses:
+   *       200:
+   *         description: Returns JWT token on success
+   */
   router.post("/verify", limiter, authController.verify);
 } else {
   console.warn("Auth controller missing handler: verify");
@@ -41,6 +64,19 @@ if (authController?.verify) {
 
 // ===== Me (JWT REQUIRED) =====
 if (authController?.me) {
+  /**
+   * @openapi
+   * /api/auth/me:
+   *   get:
+   *     tags:
+   *       - Auth
+   *     summary: Get current authenticated user
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Returns user profile
+   */
   router.get("/me", limiter, authController.me);
 } else {
   console.warn("Auth controller missing handler: me");
@@ -51,5 +87,16 @@ if (authController?.me) {
 
 // Login route - redirect to verify for Web3 authentication (backward compatibility)
 router.post('/login', limiter, authController.verify);
+/**
+ * @openapi
+ * /api/auth/login:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Login (alias for /verify)
+ *     responses:
+ *       200:
+ *         description: Returns JWT token
+ */
 
 module.exports = router;

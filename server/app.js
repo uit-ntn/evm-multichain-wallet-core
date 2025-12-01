@@ -4,6 +4,8 @@ const helmet = require("helmet");
 const compression = require("compression");
 
 const { config: appConfig, initConfig } = require("./adapters/config.adapter");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./swagger");
 const {
   logger,
   httpLogger,
@@ -49,6 +51,9 @@ app.get("/health", (req, res) => {
 
 app.use("/api/users", userRoutes);
 app.use("/api/orders", orderRoutes);
+// Swagger UI and raw JSON
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/api-docs.json", (req, res) => res.json(swaggerSpec));
 app.use(notFound);
 app.use(errorHandler);
 

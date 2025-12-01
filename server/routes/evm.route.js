@@ -1,3 +1,10 @@
+/**
+ * @openapi
+ * tags:
+ *   - name: EVM
+ *     description: EVM-related helper endpoints (balance, txs, gas)
+ */
+
 // const express = require('express');
 // const router = express.Router();
 // const evmService = require('../services/evmService');
