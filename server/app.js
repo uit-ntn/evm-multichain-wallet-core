@@ -16,8 +16,10 @@ const { defaultRateLimit } = require("./middlewares/rateLimiter");
 const { errorHandler, notFound } = require("./middlewares/errorHandler");
 const connectDB = require("./config/DBConfig");
 
+// 1. IMPORT ROUTE TRANSACTION Ở ĐÂY
 const userRoutes = require("./routes/user.route");
 const orderRoutes = require("./routes/order.route");
+const transactionRoutes = require("./routes/transaction.route"); // <--- THÊM DÒNG NÀY
 
 initConfig();
 
@@ -47,8 +49,12 @@ app.get("/health", (req, res) => {
   });
 });
 
+// 2. ĐĂNG KÝ URL CHO TRANSACTION Ở ĐÂY
 app.use("/api/users", userRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/transactions", transactionRoutes); // <--- THÊM DÒNG NÀY
+app.use("/api/tx", transactionRoutes);           // <--- THÊM DÒNG NÀY (Alias ngắn)
+
 app.use(notFound);
 app.use(errorHandler);
 
