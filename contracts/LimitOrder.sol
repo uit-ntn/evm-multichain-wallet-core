@@ -403,7 +403,7 @@ contract LimitOrder is ReentrancyGuard, Pausable, Ownable {
      */
     function getRemainingAmount(uint256 orderId) external view returns (uint256) {
         Order memory order = orders[orderId];
-        if (order.filledAmount >= order.amountIn) return 0;
+        if (order.isCancelled || order.filledAmount >= order.amountIn) return 0;
         return order.amountIn - order.filledAmount;
     }
     

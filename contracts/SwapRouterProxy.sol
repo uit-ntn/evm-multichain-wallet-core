@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -9,21 +9,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title SwapRouterProxy
- * @notice Unified proxy for DEX interactions across multiple chains
- * @dev Supports Uniswap V2/V3, PancakeSwap, SushiSwap via adapters
+ * @notice Unified Router: nhận token từ user -> gọi adapter swap -> trả tokenOut về user
  */
 contract SwapRouterProxy is ReentrancyGuard, Pausable, Ownable {
     using SafeERC20 for IERC20;
 
-    // Supported DEX types
-    enum DexType {
-        UNISWAP_V2,
-        UNISWAP_V3,
-        PANCAKESWAP,
-        SUSHISWAP
-    }
+    enum DexType { UNISWAP_V2, UNISWAP_V3, PANCAKESWAP, SUSHISWAP }
 
-    // Swap parameters structure
     struct SwapParams {
         address tokenIn;
         address tokenOut;
@@ -32,209 +24,152 @@ contract SwapRouterProxy is ReentrancyGuard, Pausable, Ownable {
         address to;
         uint256 deadline;
         DexType dexType;
-        bytes extraData; // For V3 paths, fees, etc.
+        bytes extraData; // abi.encode(address[] path) cho V2; V3 tuỳ bạn mở rộng sau
     }
 
-    // Exact output swap parameters
     struct SwapExactOutParams {
         address tokenIn;
         address tokenOut;
         uint256 amountOut;
-        uint256 amountInMax;
+        uint256 amountInMax;     // user chịu tối đa (bao gồm phí)
         address to;
         uint256 deadline;
         DexType dexType;
         bytes extraData;
     }
 
-    // Registry of DEX adapters
     mapping(DexType => address) public dexAdapters;
-    
-    // Supported tokens registry (for security)
     mapping(address => bool) public supportedTokens;
-    
-    // Fee settings
-    uint256 public protocolFee = 25; // 0.25% = 25/10000
-    uint256 public constant MAX_PROTOCOL_FEE = 100; // 1% max
+
+    uint256 public protocolFeeBps = 25; // 0.25%
+    uint256 public constant MAX_PROTOCOL_FEE_BPS = 100; // 1%
     address public feeRecipient;
-    
-    // Chain-specific WETH/WMATIC addresses
+
     address public immutable WETH;
-    
-    // Events
+
     event SwapExecuted(
         address indexed user,
         address indexed tokenIn,
         address indexed tokenOut,
-        uint256 amountIn,
+        uint256 amountInUsedOrProvided,
         uint256 amountOut,
         DexType dexType,
-        uint256 fee
+        uint256 feeTaken
     );
-    
-    event AdapterCall(
-        DexType indexed dexType,
-        address indexed adapter,
-        bytes data,
-        bool success
-    );
-    
+
     event AdapterUpdated(DexType indexed dexType, address indexed oldAdapter, address indexed newAdapter);
     event TokenSupportUpdated(address indexed token, bool supported);
-    event FeeUpdated(uint256 oldFee, uint256 newFee);
+    event FeeUpdated(uint256 oldFeeBps, uint256 newFeeBps);
+    event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
 
     constructor(address _weth) {
-        require(_weth != address(0), "Invalid WETH address");
+        require(_weth != address(0), "Router: invalid WETH");
         WETH = _weth;
         feeRecipient = msg.sender;
     }
 
-    /**
-     * @notice Execute exact input swap
-     * @param params Swap parameters including tokens, amounts, and DEX type
-     * @return amountOut Actual amount of output tokens received
-     */
-    function swapExactTokensForTokens(
-        SwapParams calldata params
-    ) external nonReentrant whenNotPaused returns (uint256 amountOut) {
-        _validateSwapParams(params.tokenIn, params.tokenOut, params.amountIn, params.deadline);
-        
-        address adapter = dexAdapters[params.dexType];
-        require(adapter != address(0), "Adapter not found");
+    // ========================= USER FUNCTIONS =========================
 
-        // Transfer tokens from user to this contract
-        IERC20(params.tokenIn).safeTransferFrom(msg.sender, address(this), params.amountIn);
-        
-        // Calculate protocol fee
-        uint256 fee = (params.amountIn * protocolFee) / 10000;
-        uint256 amountAfterFee = params.amountIn - fee;
-        
-        // Transfer fee to recipient
-        if (fee > 0) {
-            IERC20(params.tokenIn).safeTransfer(feeRecipient, fee);
-        }
-        
-        // Approve adapter to spend tokens
-        IERC20(params.tokenIn).safeIncreaseAllowance(adapter, amountAfterFee);
-        
-        // Prepare adapter call data
-        bytes memory adapterData = abi.encodeWithSignature(
+    function swapExactTokensForTokens(SwapParams calldata p)
+        external
+        nonReentrant
+        whenNotPaused
+        returns (uint256 amountOut)
+    {
+        _validateCommon(p.tokenIn, p.tokenOut, p.amountIn, p.deadline, p.to);
+
+        address adapter = dexAdapters[p.dexType];
+        require(adapter != address(0), "Router: adapter not set");
+
+        // pull tokenIn from user
+        IERC20(p.tokenIn).safeTransferFrom(msg.sender, address(this), p.amountIn);
+
+        // take fee on amountIn
+        uint256 fee = (p.amountIn * protocolFeeBps) / 10_000;
+        uint256 amountAfterFee = p.amountIn - fee;
+        if (fee > 0) IERC20(p.tokenIn).safeTransfer(feeRecipient, fee);
+
+        // approve adapter to spend
+        IERC20(p.tokenIn).safeIncreaseAllowance(adapter, amountAfterFee);
+
+        bytes memory data = abi.encodeWithSignature(
             "swapExactTokensForTokens(address,address,uint256,uint256,address,uint256,bytes)",
-            params.tokenIn,
-            params.tokenOut,
+            p.tokenIn,
+            p.tokenOut,
             amountAfterFee,
-            params.amountOutMin,
-            params.to,
-            params.deadline,
-            params.extraData
+            p.amountOutMin,
+            p.to,
+            p.deadline,
+            p.extraData
         );
-        
-        // Execute swap through adapter
-        (bool success, bytes memory returnData) = adapter.call(adapterData);
-        require(success, "Adapter call failed");
-        
-        amountOut = abi.decode(returnData, (uint256));
-        
-        // Reset adapter allowance if possible
-        uint256 remainingAllowance = IERC20(params.tokenIn).allowance(address(this), adapter);
-        if (remainingAllowance > 0) {
-            // Some tokens revert on decreaseAllowance, so we use approve instead
-            IERC20(params.tokenIn).approve(adapter, 0);
-        }
-        
-        emit SwapExecuted(
-            msg.sender,
-            params.tokenIn,
-            params.tokenOut,
-            params.amountIn,
-            amountOut,
-            params.dexType,
-            fee
-        );
-        
-        emit AdapterCall(params.dexType, adapter, adapterData, success);
+
+        (bool ok, bytes memory ret) = adapter.call(data);
+        require(ok, "Router: adapter call failed");
+
+        amountOut = abi.decode(ret, (uint256));
+
+        // reset allowance (best-effort)
+        _resetAllowance(p.tokenIn, adapter);
+
+        emit SwapExecuted(msg.sender, p.tokenIn, p.tokenOut, p.amountIn, amountOut, p.dexType, fee);
     }
 
     /**
-     * @notice Execute exact output swap
-     * @param params Exact output swap parameters
-     * @return amountIn Actual amount of input tokens used
+     * Exact-output: để tránh bài toán "fee lấy từ đâu" (vì amountInUsed đã đi swap),
+     * ta lấy phí "trần" theo amountInMax ngay từ đầu.
      */
-    function swapTokensForExactTokens(
-        SwapExactOutParams calldata params
-    ) external nonReentrant whenNotPaused returns (uint256 amountIn) {
-        _validateSwapParams(params.tokenIn, params.tokenOut, params.amountInMax, params.deadline);
-        
-        address adapter = dexAdapters[params.dexType];
-        require(adapter != address(0), "Adapter not found");
+    function swapTokensForExactTokens(SwapExactOutParams calldata p)
+        external
+        nonReentrant
+        whenNotPaused
+        returns (uint256 amountInUsed)
+    {
+        _validateCommon(p.tokenIn, p.tokenOut, p.amountInMax, p.deadline, p.to);
 
-        // Transfer max input tokens from user
-        IERC20(params.tokenIn).safeTransferFrom(msg.sender, address(this), params.amountInMax);
-        
-        // Approve adapter to spend tokens
-        IERC20(params.tokenIn).safeIncreaseAllowance(adapter, params.amountInMax);
-        
-        // Prepare adapter call data
-        bytes memory adapterData = abi.encodeWithSignature(
+        address adapter = dexAdapters[p.dexType];
+        require(adapter != address(0), "Router: adapter not set");
+
+        // pull max from user
+        IERC20(p.tokenIn).safeTransferFrom(msg.sender, address(this), p.amountInMax);
+
+        // fee trần theo amountInMax
+        uint256 feeMax = (p.amountInMax * protocolFeeBps) / 10_000;
+        uint256 amountInMaxAfterFee = p.amountInMax - feeMax;
+
+        if (feeMax > 0) IERC20(p.tokenIn).safeTransfer(feeRecipient, feeMax);
+
+        // approve adapter with amountInMaxAfterFee
+        IERC20(p.tokenIn).safeIncreaseAllowance(adapter, amountInMaxAfterFee);
+
+        bytes memory data = abi.encodeWithSignature(
             "swapTokensForExactTokens(address,address,uint256,uint256,address,uint256,bytes)",
-            params.tokenIn,
-            params.tokenOut,
-            params.amountOut,
-            params.amountInMax,
-            params.to,
-            params.deadline,
-            params.extraData
+            p.tokenIn,
+            p.tokenOut,
+            p.amountOut,
+            amountInMaxAfterFee,
+            p.to,
+            p.deadline,
+            p.extraData
         );
-        
-        // Execute swap through adapter
-        (bool success, bytes memory returnData) = adapter.call(adapterData);
-        require(success, "Adapter call failed");
-        
-        amountIn = abi.decode(returnData, (uint256));
-        
-        // Calculate and take protocol fee from actual amount used
-        uint256 fee = (amountIn * protocolFee) / 10000;
-        
-        // Refund unused tokens (minus fee)
-        uint256 refundAmount = params.amountInMax - amountIn - fee;
-        if (refundAmount > 0) {
-            IERC20(params.tokenIn).safeTransfer(msg.sender, refundAmount);
+
+        (bool ok, bytes memory ret) = adapter.call(data);
+        require(ok, "Router: adapter call failed");
+
+        amountInUsed = abi.decode(ret, (uint256));
+
+        // adapter refund phần dư (nếu có) về Router (msg.sender=Router), Router hoàn lại user
+        uint256 remaining = IERC20(p.tokenIn).balanceOf(address(this));
+        if (remaining > 0) {
+            IERC20(p.tokenIn).safeTransfer(msg.sender, remaining);
         }
-        
-        // Transfer fee to recipient
-        if (fee > 0) {
-            IERC20(params.tokenIn).safeTransfer(feeRecipient, fee);
-        }
-        
-        // Reset adapter allowance if possible
-        uint256 remainingAllowance = IERC20(params.tokenIn).allowance(address(this), adapter);
-        if (remainingAllowance > 0) {
-            // Some tokens revert on decreaseAllowance, so we use approve instead
-            IERC20(params.tokenIn).approve(adapter, 0);
-        }
-        
-        emit SwapExecuted(
-            msg.sender,
-            params.tokenIn,
-            params.tokenOut,
-            amountIn,
-            params.amountOut,
-            params.dexType,
-            fee
-        );
-        
-        emit AdapterCall(params.dexType, adapter, adapterData, success);
+
+        _resetAllowance(p.tokenIn, adapter);
+
+        emit SwapExecuted(msg.sender, p.tokenIn, p.tokenOut, amountInUsed, p.amountOut, p.dexType, feeMax);
     }
 
-    /**
-     * @notice Get quote for exact input swap
-     * @param tokenIn Input token address
-     * @param tokenOut Output token address
-     * @param amountIn Input amount
-     * @param dexType DEX type to use for quote
-     * @param extraData Additional data for complex routing
-     * @return amountOut Expected output amount
-     */
+    // ========================= QUOTE (VIEW) =========================
+
     function getAmountOut(
         address tokenIn,
         address tokenOut,
@@ -243,31 +178,21 @@ contract SwapRouterProxy is ReentrancyGuard, Pausable, Ownable {
         bytes calldata extraData
     ) external view returns (uint256 amountOut) {
         address adapter = dexAdapters[dexType];
-        require(adapter != address(0), "Adapter not found");
-        
-        bytes memory quoteData = abi.encodeWithSignature(
+        require(adapter != address(0), "Router: adapter not set");
+
+        bytes memory data = abi.encodeWithSignature(
             "getAmountOut(address,address,uint256,bytes)",
             tokenIn,
             tokenOut,
             amountIn,
             extraData
         );
-        
-        (bool success, bytes memory returnData) = adapter.staticcall(quoteData);
-        require(success, "Quote call failed");
-        
-        amountOut = abi.decode(returnData, (uint256));
+
+        (bool ok, bytes memory ret) = adapter.staticcall(data);
+        require(ok, "Router: quote failed");
+        amountOut = abi.decode(ret, (uint256));
     }
 
-    /**
-     * @notice Get quote for exact output swap
-     * @param tokenIn Input token address
-     * @param tokenOut Output token address
-     * @param amountOut Output amount
-     * @param dexType DEX type to use for quote
-     * @param extraData Additional data for complex routing
-     * @return amountIn Expected input amount
-     */
     function getAmountIn(
         address tokenIn,
         address tokenOut,
@@ -276,115 +201,103 @@ contract SwapRouterProxy is ReentrancyGuard, Pausable, Ownable {
         bytes calldata extraData
     ) external view returns (uint256 amountIn) {
         address adapter = dexAdapters[dexType];
-        require(adapter != address(0), "Adapter not found");
-        
-        bytes memory quoteData = abi.encodeWithSignature(
+        require(adapter != address(0), "Router: adapter not set");
+
+        bytes memory data = abi.encodeWithSignature(
             "getAmountIn(address,address,uint256,bytes)",
             tokenIn,
             tokenOut,
             amountOut,
             extraData
         );
-        
-        (bool success, bytes memory returnData) = adapter.staticcall(quoteData);
-        require(success, "Quote call failed");
-        
-        amountIn = abi.decode(returnData, (uint256));
+
+        (bool ok, bytes memory ret) = adapter.staticcall(data);
+        require(ok, "Router: quote failed");
+        amountIn = abi.decode(ret, (uint256));
     }
 
-    // ================= ADMIN FUNCTIONS =================
+    // ========================= ADMIN =========================
 
-    /**
-     * @notice Set DEX adapter for a specific DEX type
-     * @param dexType DEX type
-     * @param adapter Adapter contract address
-     */
     function setDexAdapter(DexType dexType, address adapter) external onlyOwner {
-        require(adapter != address(0), "Invalid adapter address");
-        
-        address oldAdapter = dexAdapters[dexType];
+        require(adapter != address(0), "Router: invalid adapter");
+        require(adapter.code.length > 0, "Router: adapter not contract");
+
+        address old = dexAdapters[dexType];
         dexAdapters[dexType] = adapter;
-        
-        emit AdapterUpdated(dexType, oldAdapter, adapter);
+        emit AdapterUpdated(dexType, old, adapter);
     }
 
-    /**
-     * @notice Update token support status
-     * @param token Token address
-     * @param supported Whether token is supported
-     */
+    function setDexAdapters(DexType[] calldata types, address[] calldata adapters) external onlyOwner {
+        require(types.length == adapters.length && types.length > 0, "Router: length mismatch");
+        for (uint256 i = 0; i < types.length; i++) {
+            require(adapters[i] != address(0), "Router: invalid adapter");
+            require(adapters[i].code.length > 0, "Router: adapter not contract");
+            address old = dexAdapters[types[i]];
+            dexAdapters[types[i]] = adapters[i];
+            emit AdapterUpdated(types[i], old, adapters[i]);
+        }
+    }
+
     function setSupportedToken(address token, bool supported) external onlyOwner {
+        require(token != address(0), "Router: invalid token");
         supportedTokens[token] = supported;
         emit TokenSupportUpdated(token, supported);
     }
 
-    /**
-     * @notice Update protocol fee
-     * @param newFee New fee rate (max 1%)
-     */
-    function setProtocolFee(uint256 newFee) external onlyOwner {
-        require(newFee <= MAX_PROTOCOL_FEE, "Fee too high");
-        
-        uint256 oldFee = protocolFee;
-        protocolFee = newFee;
-        
-        emit FeeUpdated(oldFee, newFee);
+    function setSupportedTokens(address[] calldata tokens, bool supported) external onlyOwner {
+        require(tokens.length > 0, "Router: empty");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            require(tokens[i] != address(0), "Router: invalid token");
+            supportedTokens[tokens[i]] = supported;
+            emit TokenSupportUpdated(tokens[i], supported);
+        }
     }
 
-    /**
-     * @notice Update fee recipient
-     * @param newRecipient New fee recipient address
-     */
+    function setProtocolFeeBps(uint256 newFeeBps) external onlyOwner {
+        require(newFeeBps <= MAX_PROTOCOL_FEE_BPS, "Router: fee too high");
+        uint256 old = protocolFeeBps;
+        protocolFeeBps = newFeeBps;
+        emit FeeUpdated(old, newFeeBps);
+    }
+
     function setFeeRecipient(address newRecipient) external onlyOwner {
-        require(newRecipient != address(0), "Invalid recipient");
+        require(newRecipient != address(0), "Router: invalid recipient");
+        address old = feeRecipient;
         feeRecipient = newRecipient;
+        emit FeeRecipientUpdated(old, newRecipient);
     }
 
-    /**
-     * @notice Pause contract
-     */
-    function pause() external onlyOwner {
-        _pause();
-    }
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
 
-    /**
-     * @notice Unpause contract
-     */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    /**
-     * @notice Emergency withdraw stuck tokens
-     * @param token Token address
-     * @param amount Amount to withdraw
-     */
     function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
         IERC20(token).safeTransfer(owner(), amount);
     }
 
-    // ================= INTERNAL FUNCTIONS =================
+    receive() external payable {}
 
-    /**
-     * @notice Validate swap parameters
-     */
-    function _validateSwapParams(
+    // ========================= INTERNAL =========================
+
+    function _validateCommon(
         address tokenIn,
         address tokenOut,
         uint256 amount,
-        uint256 deadline
+        uint256 deadline,
+        address to
     ) internal view {
-        require(tokenIn != address(0) && tokenOut != address(0), "Invalid token address");
-        require(tokenIn != tokenOut, "Same token");
-        require(amount > 0, "Amount must be > 0");
-        require(deadline >= block.timestamp, "Deadline expired");
-        require(supportedTokens[tokenIn] && supportedTokens[tokenOut], "Token not supported");
+        require(tokenIn != address(0) && tokenOut != address(0), "Router: invalid token");
+        require(tokenIn != tokenOut, "Router: same token");
+        require(to != address(0), "Router: invalid to");
+        require(amount > 0, "Router: amount=0");
+        require(deadline >= block.timestamp, "Router: deadline expired");
+        require(supportedTokens[tokenIn] && supportedTokens[tokenOut], "Router: token not supported");
     }
 
-    /**
-     * @notice Check if contract can receive ETH (for WETH unwrapping)
-     */
-    receive() external payable {
-        // Allow receiving ETH for WETH operations
+    function _resetAllowance(address token, address spender) internal {
+        uint256 cur = IERC20(token).allowance(address(this), spender);
+        if (cur > 0) {
+            // some tokens require approve(0) before set, we just reset to 0
+            IERC20(token).approve(spender, 0);
+        }
     }
 }

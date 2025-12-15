@@ -1,8 +1,7 @@
-/**
- * Order Model (CommonJS)
- * MongoDB collection: orders
- */
+// models/order.model.js
 const mongoose = require("mongoose");
+
+const isEthAddr = (a) => /^0x[a-fA-F0-9]{40}$/.test(a);
 
 const orderSchema = new mongoose.Schema(
   {
@@ -10,88 +9,66 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
       lowercase: true,
-      validate: {
-        validator(v) {
-          return /^0x[a-fA-F0-9]{40}$/.test(v);
-        },
-        message: "Invalid Ethereum address format",
-      },
+      validate: { validator: isEthAddr, message: "Invalid user address" },
+      index: true,
     },
+
     chainId: {
       type: Number,
       required: true,
       validate: {
-        validator(v) {
-          const valid = [1, 11155111, 137, 80002, 56, 97];
-          return valid.includes(v);
-        },
+        validator: (v) => [1, 11155111, 137, 80002, 56, 97].includes(v),
         message: "Invalid chain ID",
       },
+      index: true,
     },
+
+    // limit order params (off-chain payload)
     tokenIn: {
       type: String,
       required: true,
       lowercase: true,
-      validate: { validator: (v) => /^0x[a-fA-F0-9]{40}$/.test(v) },
+      validate: { validator: isEthAddr, message: "Invalid tokenIn address" },
     },
     tokenOut: {
       type: String,
       required: true,
       lowercase: true,
-      validate: { validator: (v) => /^0x[a-fA-F0-9]{40}$/.test(v) },
+      validate: { validator: isEthAddr, message: "Invalid tokenOut address" },
     },
-    amountIn: {
-      type: String,
-      required: true,
-      validate: { validator: (v) => /^\d+$/.test(v) && v !== "0" },
-    },
-    targetPrice: {
-      type: String,
-      required: true,
-      validate: { validator: (v) => /^\d+(\.\d+)?$/.test(v) && parseFloat(v) > 0 },
-    },
+
+    amountIn: { type: String, required: true },     // wei string
+    targetPrice: { type: String, required: true },  // normalized string
+    deadline: { type: Number, required: true },     // unix seconds
+
+    // optional for EIP-712 / anti replay
+    nonce: { type: String, default: "" },
+    signature: { type: String, default: "" },
+
     status: {
       type: String,
-      required: true,
-      enum: ["OPEN", "FILLED", "CANCELLED", "EXPIRED"],
+      enum: ["OPEN", "FILLED", "CANCELLED", "EXPIRED", "FAILED"],
       default: "OPEN",
+      uppercase: true,
+      index: true,
     },
-    signature: {
-      type: String,
-      required: true,
-      unique: true,
-      validate: { validator: (v) => /^0x[a-fA-F0-9]{130}$/.test(v) },
-    },
-    txHashFill: {
-      type: String,
-      default: null,
-      validate: { validator: (v) => !v || /^0x[a-fA-F0-9]{64}$/.test(v) },
-    },
-    expiresAt: {
-      type: Date,
-      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    },
-    filledAt: { type: Date, default: null },
-    cancelledAt: { type: Date, default: null },
+
+    // optional on-chain proof when filled/cancelled
+    txHash: { type: String, lowercase: true, default: "" },
   },
   { timestamps: true, collection: "orders" }
 );
 
-orderSchema.index({ signature: 1 }, { unique: true });
-orderSchema.index({ user: 1, chainId: 1 });
-orderSchema.index({ status: 1 });
-orderSchema.index({ createdAt: -1 });
-orderSchema.index({ expiresAt: 1 });
+// Indexes
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ chainId: 1, status: 1, createdAt: -1 });
 
-orderSchema.virtual("isExpired").get(function () {
-  return this.expiresAt && new Date() > this.expiresAt;
+orderSchema.pre("save", function (next) {
+  if (this.user) this.user = this.user.toLowerCase();
+  if (this.tokenIn) this.tokenIn = this.tokenIn.toLowerCase();
+  if (this.tokenOut) this.tokenOut = this.tokenOut.toLowerCase();
+  if (this.txHash) this.txHash = this.txHash.toLowerCase();
+  next();
 });
 
-orderSchema.methods.cancel = function () {
-  this.status = "CANCELLED";
-  this.cancelledAt = new Date();
-  return this.save();
-};
-
-const Order = mongoose.model("Order", orderSchema);
-module.exports = Order;
+module.exports = mongoose.model("Order", orderSchema);

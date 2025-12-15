@@ -1,19 +1,22 @@
-/**
- * User Model (CommonJS)
- */
+// models/user.model.js
 const mongoose = require("mongoose");
+
+const isEthAddr = (a) => /^0x[a-fA-F0-9]{40}$/.test(a);
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true, maxlength: 100 },
-    password: { type: String, required: true, minlength: 6 },
     address: {
       type: String,
       required: true,
       unique: true,
       lowercase: true,
-      validate: { validator: (v) => /^0x[a-fA-F0-9]{40}$/.test(v) },
+      trim: true,
+      validate: {
+        validator: isEthAddr,
+        message: "Invalid wallet address",
+      },
     },
+    name: { type: String, trim: true, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
   },
   { timestamps: true, collection: "users" }
@@ -21,11 +24,13 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({ address: 1 }, { unique: true });
 
-userSchema.methods.toJSON = function () {
-  const user = this.toObject();
-  delete user.password;
-  return user;
+userSchema.statics.findByAddress = function (address) {
+  return this.findOne({ address: address.toLowerCase() });
 };
 
-const User = mongoose.model("User", userSchema);
-module.exports = User;
+userSchema.pre("save", function (next) {
+  if (this.address) this.address = this.address.toLowerCase();
+  next();
+});
+
+module.exports = mongoose.model("User", userSchema);

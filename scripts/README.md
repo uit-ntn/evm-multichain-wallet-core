@@ -1,45 +1,91 @@
-# Scripts Triển Khai
+# 🚀 Scripts Triển Khai - PHIÊN BẢN ĐÃ SỬA
 
-Scripts Hardhat cho triển khai và xác minh hợp đồng thông minh trên nhiều mạng.
+Scripts Hardhat đã được **SỬA LỖI** cho triển khai hợp đồng với Registry tích hợp.
+
+## ✅ Các Lỗi Đã Sửa
+
+- **Đã sửa**: `TypeError: registry.set is not a function` → Giờ dùng `registry.registerContract()`
+- **Đã sửa**: Lỗi insufficient funds → Thêm kiểm tra balance và link faucet
+- **Đã sửa**: Xử lý lỗi kém → Thêm xử lý lỗi graceful với thông báo hữu ích
+- **Đã thêm**: Kiểm tra balance tự động trước khi deploy
+- **Đã thêm**: Link faucet và troubleshooting tích hợp
 
 ## 📁 Scripts
 
-### 🚀 **deploy.js**
-Script triển khai chính cho tất cả hợp đồng.
+### 🚀 **deploy.js** (ĐÃ SỬA)
+Script triển khai chính với Registry integration và balance checking.
 
-**Tính Năng:**
-- ✅ Triển khai hợp đồng lên Sepolia và Polygon Amoy
-- ✅ Ước tính gas tự động
-- ✅ Kiểm tra số dư trước triển khai
-- ✅ Xuất địa chỉ hợp đồng
-- ✅ Hướng dẫn cập nhật môi trường
+**Tính Năng Mới:**
+- ✅ **Kiểm tra balance tự động** với link faucet nếu thiếu tiền
+- ✅ **Registry integration** - tự động đăng ký contracts
+- ✅ **Error handling tốt hơn** với thông báo chi tiết
+- ✅ **Faucet links tích hợp** cho từng network
+- ✅ Triển khai Registry + LimitOrder + TradeToken
+- ✅ Backend tự động discover addresses
 
 **Usage:**
 ```bash
-# Deploy to Sepolia
+# Deploy to Sepolia (với balance check)
 npx hardhat run scripts/deploy.js --network sepolia
 
-# Deploy to Polygon Amoy
+# Deploy to Polygon Amoy (với balance check)
 npx hardhat run scripts/deploy.js --network polygonAmoy
 
-# Deploy to local network
-npx hardhat run scripts/deploy.js --network localhost
+# Deploy to BSC Testnet
+npx hardhat run scripts/deploy.js --network bscTestnet
 ```
 
-**Output Example:**
+### 🌐 **deploy-all.js** (ĐÃ SỬA)
+Multi-network deployment với balance checking tích hợp.
+
+**Tính Năng Mới:**
+- ✅ **Kiểm tra balance tất cả networks** trước khi deploy
+- ✅ **Automatic faucet links** nếu thiếu funds
+- ✅ **Graceful error handling** với solutions
+- ✅ **Deployment summary** với success rate
+- ✅ **Contract address parsing** từ output
+
+**Usage:**
+```bash
+# Deploy to tất cả networks với balance check
+npx hardhat run scripts/deploy-all.js
+```
+
+**Output Example (ĐÃ SỬA):**
 ```
 🚀 Starting deployment...
-📡 Network: sepolia
+📡 Network: sepolia (11155111)
 👤 Deployer: 0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
-💰 Balance: 0.5 ETH
+💰 Balance: 0.05 ETH
+
+📝 Deploying Registry...
+✅ Registry deployed at: 0xabcd...1234
 
 📝 Deploying LimitOrder...
-✅ LimitOrder deployed to: 0x123456789abcdef123456789abcdef1234567890
+✅ LimitOrder deployed to: 0xefgh...5678
 
-✅ Deployment completed!
+📝 Deploying TradeToken...
+✅ TradeToken deployed to: 0xijkl...9012
 
-📋 Update your .env file:
-LIMIT_ORDER_ADDRESS_SEPOLIA=0x123456789abcdef123456789abcdef1234567890
+📝 Registering contracts in Registry...
+✅ LimitOrder registered in Registry
+✅ TradeToken registered in Registry
+
+🎉 ===== DEPLOYMENT COMPLETE =====
+📋 Registry: 0xabcd...1234
+🔄 LimitOrder: 0xefgh...5678
+🪙 TradeToken: 0xijkl...9012
+
+💡 Backend will automatically discover contracts via Registry!
+```
+
+**Nếu thiếu funds:**
+```
+❌ Insufficient balance! Need at least 0.01 ETH for deployment
+📍 Get testnet tokens:
+   sepolia: https://sepoliafaucet.com/
+   Polygon Amoy: https://faucet.polygon.technology/
+   BSC Testnet: https://testnet.bnbchain.org/faucet-smart
 ```
 
 ### 🔍 **verify.js**
@@ -277,39 +323,74 @@ main().catch(console.error);
 - **Faucet**: https://faucet.polygon.technology
 - **RPC**: https://rpc-amoy.polygon.technology (public)
 
-## 🚨 Khắc Phục Sự Cố
+## 💰 Lấy Testnet Tokens (TÍCH HỢP)
 
-### Vấn Đề Thường Gặp
+Scripts giờ tự động hiện link faucet nếu bạn thiếu token:
 
-#### 1. **Số Dư Không Đủ**
-```
-Error: insufficient funds for intrinsic transaction cost
-```
-**Giải Pháp**: Lấy token testnet từ faucet
+### Sepolia (Ethereum Testnet)
+- **Faucet**: https://sepoliafaucet.com/
+- **Amount**: 0.5 ETH per day
+- **Requirements**: GitHub account
 
-#### 2. **Khóa Riêng Không Hợp Lệ**
-```
-Error: invalid private key
-```
-**Giải Pháp**: Kiểm tra định dạng PRIVATE_KEY (tiền tố 0x)
+### Polygon Amoy (Polygon Testnet)  
+- **Faucet**: https://faucet.polygon.technology/
+- **Amount**: 1 MATIC per day
+- **Requirements**: Alchemy account (free)
 
-#### 3. **Kết Nối Mạng**
-```
-Error: could not detect network
-```
-**Giải Pháp**: Kiểm tra URL điểm cuối RPC
+### BSC Testnet (Binance Smart Chain)
+- **Faucet**: https://testnet.bnbchain.org/faucet-smart
+- **Amount**: 0.1 BNB per day
+- **Requirements**: BNB wallet
 
-#### 4. **Hợp Đồng Đã Được Xác Minh**
-```
-Error: Contract source code already verified
-```
-**Giải Pháp**: Điều này bình thường, hợp đồng đã được xác minh rồi
+## 🔍 Registry Integration (MỚI)
 
-#### 5. **Ước Tính Gas Thất Bại**
+Backend giờ tự động discover contract addresses:
+
+```javascript
+// Backend code - không cần hardcode addresses nữa!
+const registryAddress = "0xabcd...1234"; // Từ deployment output
+const registry = new ethers.Contract(registryAddress, REGISTRY_ABI, provider);
+
+// Lấy contract addresses động
+const limitOrderAddress = await registry.getContract("limitOrder");
+const tradeTokenAddress = await registry.getContract("tradeToken");
+
+// Lấy tất cả contracts một lần
+const [names, addresses] = await registry.getAllContracts();
+console.log("Available contracts:", names); // ["limitOrder", "tradeToken"]
 ```
-Error: cannot estimate gas
+
+## 🚨 Khắc Phục Sự Cố (TOÀN DIỆN)
+
+### Lỗi Đã Sửa ✅
+
+#### 1. **"TypeError: registry.set is not a function"**
+- **ĐÃ SỬA**: Giờ dùng `registry.registerContract(name, address)`
+- **Nguyên nhân**: Sai tên function trong deployment script
+
+#### 2. **"Insufficient funds for intrinsic transaction cost"**
+- **ĐÃ SỬA**: Tự động kiểm tra balance với faucet links
+- **Giải pháp**: Lấy testnet tokens từ faucet links được cung cấp
+
+### Vấn Đề Thường Gặp & Giải Pháp
+
+#### 3. **"Contract not found"**
+```bash
+# Compile contracts trước
+npx hardhat compile
 ```
-**Giải Pháp**: Kiểm tra tham số constructor của hợp đồng
+
+#### 4. **"Network not configured"**
+- Kiểm tra `hardhat.config.js` network settings
+- Verify RPC URLs trong `.env` file
+
+#### 5. **"Private key not set"**
+- Thêm `PRIVATE_KEY=your_key` vào `.env` file
+- Không bao giờ commit private keys lên git
+
+#### 6. **"RPC URL not working"**
+- Thử alternative RPC providers
+- Kiểm tra IP có bị block không
 
 ### Lệnh Gỡ Lỗi
 ```bash
@@ -355,4 +436,19 @@ console.log('Contract exists:', code !== '0x');
 
 ---
 
-**Chúc Triển Khai Vui Vẻ! 🚀**
+## 🎉 Tóm Tắt
+
+Deployment scripts giờ đã **HOÀN TOÀN SỬA** và bao gồm:
+
+- ✅ **Kiểm tra balance tự động** trước khi deploy
+- ✅ **Registry integration đúng** dùng `registerContract()`  
+- ✅ **Error handling toàn diện** với thông báo hữu ích
+- ✅ **Faucet links tích hợp** để lấy testnet tokens
+- ✅ **Multi-network support** với graceful failure handling
+- ✅ **Backend integration** để tự động discover contracts
+
+**Không cần cập nhật .env thủ công nữa!** Backend sẽ tự động discover contract addresses qua Registry. 🚀
+
+---
+
+**Chúc Triển Khai Vui Vẻ! 🎯**
