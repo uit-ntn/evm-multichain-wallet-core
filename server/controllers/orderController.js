@@ -1,46 +1,85 @@
-const { orderService } = require("../services/order.service");
-const { logger } = require("../adapters/logger.adapter");
+// controllers/orderController.js
+const orderService = require("../services/order.service");
 
-const orderController = {
-  // [1] Create Order
-  create: async (req, res) => {
-    try {
-      const result = await orderService.createOrder(req.body);
-      const code = result.statusCode || (result.success ? 201 : 400);
-      res.status(code).json(result);
-    } catch (error) {
-      logger.error("Order create error", { error: error.message });
-      res.status(500).json({ message: error.message });
-    }
-  },
-
-  // [9] Fill Order (Bot)
-  fill: async (req, res) => {
-    try {
-      const { orderId, txHashFill } = req.body;
-      const secret = req.headers['x-bot-secret']; 
-      
-      if (!orderId || !txHashFill) return res.status(400).json({ message: "Missing data" });
-
-      const result = await orderService.fillOrder(orderId, txHashFill, secret);
-      const code = result.statusCode || (result.success ? 200 : 500);
-      res.status(code).json(result);
-    } catch (error) {
-      logger.error("Order fill error", { error: error.message });
-      res.status(500).json({ message: error.message });
-    }
-  },
-  
-  // Placeholder cho các hàm của An (để tránh lỗi nếu Route gọi tới)
-  list: async (req, res) => res.json({ message: "List orders (TODO by An)" }),
-  getById: async (req, res) => res.json({ message: "Get order detail (TODO by An)" }),
-  update: async (req, res) => res.json({ message: "Update order (TODO by An)" }),
-  cancel: async (req, res) => res.json({ message: "Cancel order (TODO by An)" }),
-  expire: async (req, res) => res.json({ message: "Expire order (TODO by An)" }),
-  delete: async (req, res) => res.json({ message: "Delete order (TODO by An)" }),
-  validateSignature: async (req, res) => res.json({ message: "Validate sig (TODO by An)" })
+exports.getAllOrders = async (req, res) => {
+  try {
+    const { user, chainId, status, limit = 20, skip = 0 } = req.query;
+    const result = await orderService.listOrders({
+      user,
+      chainId: chainId ? parseInt(chainId) : undefined,
+      status,
+      limit: parseInt(limit),
+      skip: parseInt(skip),
+    });
+    res.json({ success: true, ...result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 };
 
-// --- [QUAN TRỌNG] Sửa dòng này ---
-module.exports = orderController; 
-// Không dùng: module.exports = { orderController };
+exports.getOrderById = async (req, res) => {
+  try {
+    const order = await orderService.getById(req.params.id);
+    if (!order) return res.status(404).json({ success: false, error: "Order not found" });
+    res.json({ success: true, data: order });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+};
+
+exports.createOrder = async (req, res) => {
+  try {
+    const { user, chainId, tokenIn, tokenOut, amountIn, targetPrice, deadline, nonce, signature } = req.body;
+
+    if (!user || !chainId || !tokenIn || !tokenOut || !amountIn || !targetPrice || !deadline) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    const order = await orderService.createOrder({
+      user,
+      chainId,
+      tokenIn,
+      tokenOut,
+      amountIn: String(amountIn),
+      targetPrice: String(targetPrice),
+      deadline: Number(deadline),
+      nonce: nonce ? String(nonce) : "",
+      signature: signature ? String(signature) : "",
+    });
+
+    res.status(201).json({ success: true, data: order });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+};
+
+exports.updateOrder = async (req, res) => {
+  try {
+    const order = await orderService.updateOrder(req.params.id, req.body);
+    if (!order) return res.status(404).json({ success: false, error: "Order not found" });
+    res.json({ success: true, data: order });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+};
+
+exports.cancelOrder = async (req, res) => {
+  try {
+    const { txHash = "" } = req.body;
+    const order = await orderService.cancelOrder(req.params.id, { txHash });
+    if (!order) return res.status(404).json({ success: false, error: "Order not found" });
+    res.json({ success: true, data: order });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+};
+
+exports.deleteOrder = async (req, res) => {
+  try {
+    const order = await orderService.deleteOrder(req.params.id);
+    if (!order) return res.status(404).json({ success: false, error: "Order not found" });
+    res.json({ success: true, message: "Deleted" });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+};

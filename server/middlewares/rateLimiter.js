@@ -57,8 +57,26 @@ const apiRateLimit = rateLimit({
   },
 });
 
+// Custom rate limiter function
+const rateLimiter = (options) => {
+  return rateLimit({
+    windowMs: options.windowMs || 1 * 60 * 1000,
+    max: options.max || 30,
+    message: options.message || "Too many requests, please try again later.",
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+      res.status(429).json({
+        error: options.message || "Too many requests, please try again later.",
+        retryAfter: Math.ceil(options.windowMs / 1000 / 60) + " minute(s)",
+      });
+    },
+  });
+};
+
 module.exports = {
   defaultRateLimit,
   authRateLimit,
   apiRateLimit,
+  rateLimiter,
 };

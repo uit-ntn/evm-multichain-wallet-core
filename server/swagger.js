@@ -17,15 +17,7 @@ const options = {
         url: host,
       },
     ],
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: "http",
-          scheme: "bearer",
-          bearerFormat: "JWT",
-        },
-      },
-    },
+    // No authentication required for P2P model
   },
   apis: ["./server/routes/*.js", "./server/controllers/*.js"],
 };

@@ -6,7 +6,6 @@
 const { config } = require('./env');
 const { chains, getChainById } = require('./chains');
 const { logger } = require('./logger');
-const jwt = require('./jwt');
 
 // Export for backward compatibility with old code
 module.exports = config;
@@ -15,4 +14,3 @@ module.exports = config;
 module.exports.chains = chains;
 module.exports.getChainById = getChainById;
 module.exports.logger = logger;
-module.exports.jwt = jwt;

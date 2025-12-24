@@ -1,19 +1,19 @@
+// routes/user.route.js
 const express = require("express");
-const userController = require("../controllers/userController");
-
 const router = express.Router();
 
-/**
- * @openapi
- * /api/users:
- *   get:
- *     tags:
- *       - Users
- *     summary: Get list of users
- *     responses:
- *       200:
- *         description: Returns an array of users
- */
-router.get("/", userController.getAllUsers);
+const {
+  getAllUsers,
+  getUserByAddress,
+  createUser,
+  updateUser,
+  deleteUser,
+} = require("../controllers/userController");
+
+router.get("/", getAllUsers);
+router.get("/:address", getUserByAddress);
+router.post("/", createUser);
+router.patch("/:address", updateUser);
+router.delete("/:address", deleteUser);
 
 module.exports = router;

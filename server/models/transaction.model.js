@@ -1,62 +1,67 @@
-const mongoose = require('mongoose');
+// models/transaction.model.js
+const mongoose = require("mongoose");
 
-const transactionSchema = new mongoose.Schema({
-  user: {
-    type: String,
-    required: true,
-    lowercase: true,
-    trim: true,
-    index: true
+const isTxHash = (v) => /^0x[a-fA-F0-9]{64}$/.test(v);
+const isEthAddr = (v) => /^0x[a-fA-F0-9]{40}$/.test(v);
+
+const transactionSchema = new mongoose.Schema(
+  {
+    txHash: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      validate: { validator: isTxHash, message: "Invalid txHash format" },
+      index: true,
+    },
+
+    user: {
+      type: String,
+      required: true,
+      lowercase: true,
+      validate: { validator: isEthAddr, message: "Invalid user address" },
+      index: true,
+    },
+
+    chainId: {
+      type: Number,
+      required: true,
+      validate: {
+        validator: (v) => [1, 11155111, 137, 80002, 56, 97].includes(v),
+        message: "Invalid chainId",
+      },
+      index: true,
+    },
+
+    type: {
+      type: String,
+      required: true,
+      enum: ["SWAP", "STAKE", "CLAIM", "LIMIT"],
+      uppercase: true,
+      index: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["PENDING", "CONFIRMED", "FAILED"],
+      default: "PENDING",
+      uppercase: true,
+      index: true,
+    },
   },
-  chainId: {
-    type: Number,
-    required: true,
-    index: true
-  },
-  txHash: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  type: {
-    type: String,
-    // Cập nhật Enum theo Database Dictionary
-    enum: ['SWAP', 'LIMIT_ORDER', 'APPROVE', 'STAKE', 'UNSTAKE', 'TRANSFER', 'CLAIM'],
-    required: true,
-    uppercase: true
-  },
-  status: {
-    type: String,
-    enum: ['PENDING', 'CONFIRMED', 'FAILED'],
-    default: 'PENDING',
-    uppercase: true,
-    index: true
-  },
-  tokenIn: { type: String, lowercase: true, trim: true },
-  tokenOut: { type: String, lowercase: true, trim: true },
-  
-  // Lưu string để bảo toàn độ chính xác BigInt
-  amountIn: { type: String, default: '0' },
-  amountOut: { type: String, default: '0' },
-  
-  // Task #6: IPFS Receipt CID
-  cid: { 
-    type: String, 
-    default: null,
-    trim: true
-  },
-  
-  blockNumber: { type: Number },
-  timestamp: { type: Date, default: Date.now }
-}, {
-  timestamps: true,
-  collection: 'transactions'
+  { timestamps: true, collection: "transactions" }
+);
+
+transactionSchema.index({ user: 1, chainId: 1, createdAt: -1 });
+
+transactionSchema.statics.findByTxHash = function (txHash) {
+  return this.findOne({ txHash: txHash.toLowerCase() });
+};
+
+transactionSchema.pre("save", function (next) {
+  if (this.user) this.user = this.user.toLowerCase();
+  if (this.txHash) this.txHash = this.txHash.toLowerCase();
+  next();
 });
 
-// Indexes tối ưu cho Tra cứu lịch sử & Admin
-transactionSchema.index({ user: 1, chainId: 1, createdAt: -1 });
-transactionSchema.index({ createdAt: -1 });
-
-module.exports = mongoose.model('Transaction', transactionSchema);
+module.exports = mongoose.model("Transaction", transactionSchema);

@@ -1,18 +1,45 @@
+// services/user.service.js
 const User = require("../models/user.model");
-const { logger } = require("../adapters/logger.adapter");
 
-const getAllUsers = async ({ page, limit }) => {
-  try {
-    const skip = (page - 1) * limit;
-    const users = await User.find({})
-      .select("-password")
-      .skip(skip)
-      .limit(limit);
-    return users;
-  } catch (error) {
-    logger.error("Error getting all users", { error: error.message });
-    throw error;
-  }
+const createOrGetUser = async ({ address, name = "" }) => {
+  const existed = await User.findByAddress(address);
+  if (existed) return existed;
+
+  return User.create({ address, name });
 };
 
-module.exports = { getAllUsers };
+const getByAddress = async (address) => {
+  return User.findByAddress(address);
+};
+
+const listUsers = async ({ limit = 20, skip = 0 } = {}) => {
+  const [total, data] = await Promise.all([
+    User.countDocuments({}),
+    User.find({}).sort({ createdAt: -1 }).limit(limit).skip(skip),
+  ]);
+  return { total, data };
+};
+
+const updateUser = async (address, patch = {}) => {
+  const allowed = {};
+  if (typeof patch.name === "string") allowed.name = patch.name;
+  if (patch.role && ["user", "admin"].includes(patch.role)) allowed.role = patch.role;
+
+  return User.findOneAndUpdate(
+    { address: address.toLowerCase() },
+    { $set: allowed },
+    { new: true }
+  );
+};
+
+const deleteUser = async (address) => {
+  return User.findOneAndDelete({ address: address.toLowerCase() });
+};
+
+module.exports = {
+  createOrGetUser,
+  getByAddress,
+  listUsers,
+  updateUser,
+  deleteUser,
+};

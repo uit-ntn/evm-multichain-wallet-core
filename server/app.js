@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const helmet = require("helmet");
 const compression = require("compression");
 
@@ -18,10 +17,11 @@ const { defaultRateLimit } = require("./middlewares/rateLimiter");
 const { errorHandler, notFound } = require("./middlewares/errorHandler");
 const connectDB = require("./config/DBConfig");
 
-// 1. IMPORT ROUTE TRANSACTION Ở ĐÂY
+// Routes - Simple CRUD
 const userRoutes = require("./routes/user.route");
 const orderRoutes = require("./routes/order.route");
-const transactionRoutes = require("./routes/transaction.route"); // <--- THÊM DÒNG NÀY
+const transactionRoutes = require("./routes/transaction.route");
+const receiptRoutes = require("./routes/receipt.route");
 
 initConfig();
 
@@ -32,17 +32,29 @@ app.use(responseTimeMiddleware);
 app.use(httpLogger);
 app.use(errorLogger);
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
-app.use(
-  cors({
-    origin: appConfig.corsOrigin.split(","),
-    credentials: true,
-  })
-);
+
+// CORS configuration - Completely disabled for P2P development
+logger.info("🌐 CORS Configuration: Completely disabled for P2P model");
+
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
 app.use(compression());
 app.use(defaultRateLimit);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
     status: "healthy",
@@ -51,20 +63,23 @@ app.get("/health", (req, res) => {
   });
 });
 
-// 2. ĐĂNG KÝ URL CHO TRANSACTION Ở ĐÂY
-app.use("/api/users", userRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/transactions", transactionRoutes); // <--- THÊM DÒNG NÀY
-app.use("/api/tx", transactionRoutes);           // <--- THÊM DÒNG NÀY (Alias ngắn)
+// API Routes - Simple CRUD for all 4 nghiệp vụ
+app.use("/api/users", userRoutes);              // Web3 wallet users
+app.use("/api/orders", orderRoutes);            // Nghiệp vụ 1: Limit orders
+app.use("/api/transactions", transactionRoutes); // Nghiệp vụ 2 & 3: Swap + Staking
+app.use("/api/receipts", receiptRoutes);        // Nghiệp vụ 4: IPFS receipts
+
 
 // Swagger UI and raw JSON
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get("/api-docs.json", (req, res) => res.json(swaggerSpec));
+
+// Error handlers
 app.use(notFound);
 app.use(errorHandler);
 
 connectDB()
-  .then(() => {
+  .then(async () => {    
     const PORT = appConfig.port || 4000;
     app.listen(PORT, () => logger.info(`🚀 Server started on port ${PORT}`));
   })

@@ -1,40 +1,58 @@
-const Transaction = require('../models/transaction.model');
+// services/transaction.service.js
+const Transaction = require("../models/transaction.model");
 
-module.exports = {
-  async createLog(data) {
-    return await Transaction.create(data);
-  },
+/**
+ * FE gọi sau khi gửi tx on-chain (lưu PENDING)
+ */
+const create = async ({ txHash, user, chainId, type, status = "PENDING" }) => {
+  const existed = await Transaction.findByTxHash(txHash);
+  if (existed) return existed;
 
-  async getList(filter, page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
-    const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Transaction.countDocuments(filter)
-    ]);
-    return { items: transactions, total, page, limit };
-  },
-
-  async getDetail(txHash) {
-    return await Transaction.findOne({ txHash: txHash.toLowerCase() });
-  },
-
-  async updateStatus(txHash, status, extraData = {}) {
-    return await Transaction.findOneAndUpdate(
-      { txHash: txHash.toLowerCase() },
-      { status: status.toUpperCase(), ...extraData },
-      { new: true }
-    );
-  },
-
-  async attachReceipt(txHash, cid) {
-    return await Transaction.findOneAndUpdate(
-      { txHash: txHash.toLowerCase() },
-      { cid },
-      { new: true }
-    );
-  },
-
-  async deleteLog(txHash) {
-    return await Transaction.findOneAndDelete({ txHash: txHash.toLowerCase() });
-  }
+  return Transaction.create({
+    txHash,
+    user,
+    chainId,
+    type,
+    status,
+  });
 };
+
+const getByHash = async (txHash) => {
+  return Transaction.findByTxHash(txHash);
+};
+
+const list = async ({ user, chainId, type, status, limit = 20, skip = 0 } = {}) => {
+  const q = {};
+  if (user) q.user = user.toLowerCase();
+  if (chainId != null) q.chainId = Number(chainId);
+  if (type) q.type = type.toUpperCase();
+  if (status) q.status = status.toUpperCase();
+
+  const [total, data] = await Promise.all([
+    Transaction.countDocuments(q),
+    Transaction.find(q).sort({ createdAt: -1 }).limit(limit).skip(skip),
+  ]);
+
+  return { total, data };
+};
+
+/**
+ * Listener/admin gọi cập nhật status
+ */
+const updateStatus = async (txHash, status) => {
+  const allowed = ["PENDING", "CONFIRMED", "FAILED"];
+  const s = String(status || "").toUpperCase();
+  if (!allowed.includes(s)) throw new Error("Invalid status");
+
+  return Transaction.findOneAndUpdate(
+    { txHash: txHash.toLowerCase() },
+    { $set: { status: s } },
+    { new: true }
+  );
+};
+
+const remove = async (txHash) => {
+  return Transaction.findOneAndDelete({ txHash: txHash.toLowerCase() });
+};
+
+module.exports = { create, getByHash, list, updateStatus, remove };
