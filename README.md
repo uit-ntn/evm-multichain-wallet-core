@@ -1,640 +1,90 @@
-# EVM Multichain Wallet - Limit Orders + IPFS Receipts
+# 🚀 EVM Multichain Wallet Core
 
-Một **Hardhat cho Backend project** production-ready cho EVM DApp hỗ trợ **Limit Orders**, **multichain event sync**, và **decentralized receipts trên IPFS**.  
-Repository này tích hợp **Smart Contracts** và **Backend API** để đồng bộ ABI/addresses và đơn giản hóa CI/CD.
+**Smart Contracts & Backend API** cho ứng dụng ví đa chuỗi EVM với **Limit Orders**, **Token Swap**, **Staking Rewards**, và **IPFS Receipt Storage**.
 
 ---
 
 ## ✨ Tính Năng Chính
 
-- **Kiến trúc Clean** chia tách rõ ràng: **middleware / controller / model / service / listener / config**
-- **REST API** cho Orders, Receipts, Transactions, Settings, Admin
-- **EIP‑712 authentication** (không mật khẩu; nonces an toàn chống replay)
-- **Multichain** registry (Sepolia, Polygon Amoy, BSC Testnet) với **timeout / retry / fallback RPC**
-- **Event listeners** idempotent cho mỗi chain
-- **IPFS receipts** với mapping `txHash ↔ CID`
-- **MongoDB + Mongoose** với indexing phù hợp
-- Testing (unit/integration/E2E) + performance monitoring
+### 🔗 Smart Contracts
+- **Registry System**: Quản lý địa chỉ contracts động
+- **Limit Orders**: Đặt lệnh mua/bán với giá giới hạn
+- **Token Swap**: Swap tokens qua multiple DEX (Uniswap V2, PancakeSwap)
+- **Staking Rewards**: Stake tokens để nhận rewards với epoch system
+- **Trade Token**: ERC20 token với mint/burn và pause functionality
+
+### 🌐 Backend API
+- **REST API** cho Orders, Receipts, Transactions, Users
+- **EIP-712 Authentication** (không password, chống replay attacks)
+- **Multichain Support** (Sepolia, BSC Testnet, Polygon Amoy)
+- **Event Listeners** đồng bộ on-chain events
+- **IPFS Integration** cho decentralized receipt storage
+- **MongoDB** với Mongoose ODM
 
 ---
 
-## 🗂️ Cấu Trúc Project
+## 🏗️ Kiến Trúc Project
 
 ```
-/contracts/                # 🔹 Smart Contracts (Solidity)
-  LimitOrder.sol          # Contract chính cho limit orders
-  TradeToken.sol          # Token để trade
-  StakingRewards.sol      # Staking rewards
-  ReceiptGenerator.sol    # Tạo receipts
-  SystemAdmin.sol         # Admin functions
-  DexAdapterV2.sol        # DEX adapter
-  SwapRouterProxy.sol     # Swap router
-
-/scripts/                  # 🔹 Hardhat deploy & verify scripts
-  deploy.js               # Deploy contracts lên networks
-  verify.js               # Verify contracts trên explorer
-
-/test/                     # 🔹 Smart contract tests (Hardhat)
-  LimitOrder.test.js      # Unit tests cho LimitOrder
-  StakingRewards.test.js  # Tests cho staking
-
-/server/                  # 🔹 Node.js API Server
-  /config/                # Cấu hình app, DB, chains, logger
-    chains.js             # Registry chains & contract addresses
-    env.js                # Environment loader/validator
-    logger.js             # Logging configuration
-    DBConfig.js           # MongoDB connection
-  /controllers/           # HTTP handlers (routing layer)
-    order.controller.js
-    transaction.controller.js
-    user.controller.js
-  /models/                # Database models (MongoDB/Mongoose)
-    order.model.js
-    transaction.model.js
-    user.model.js
-  /services/              # Business logic layer
-    order.service.js
-    transaction.service.js
-    user.service.js
-  /routes/                # Express routes
-    index.js
-    evm.js
-    sui.js
-    user.route.js
-  /middleware/            # Express middlewares
-    errorHandler.js
-    rateLimiter.js
-  /utils/                 # Helper functions
-    helpers.js
-  /adapters/              # External integrations (empty)
-  /listeners/             # Event listeners (empty)
-  app.js                  # Express app entry point
-
-/artifacts/               # (auto-generated) Compiled contracts & ABIs
-hardhat.config.js         # Cấu hình Hardhat networks & compiler
-package.json              # Dependencies & scripts
-.env                      # Environment variables
-```
-
-> **Lý do thiết kế**: **controllers** xử lý HTTP; **services** implement business logic; **models** xử lý database; **listeners** đồng bộ on-chain events; **middlewares** xử lý cross-cutting concerns; **config** tập trung cấu hình.
-
----
-
-## 🔧 Yêu Cầu Hệ Thống
-
-- **Node.js** ≥ 18.x (ES2022), **npm** ≥ 9
-- **MongoDB** ≥ 5.0 (local hoặc MongoDB Atlas)
-- RPC endpoints cho các EVM chains (Alchemy, Infura, ...)
-- Metamask wallet với testnet ETH/MATIC
-- (Tùy chọn) IPFS provider keys (Web3.Storage, Pinata)
-
----
-
-## 🔐 Cấu Hình Environment (`.env`)
-
-Tạo file `.env` ở thư mục gốc:
-
-```bash
-# --- GENERAL CONFIG ---
-NODE_ENV=development
-PORT=4000
-
-# --- DATABASE ---
-MONGO_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/evm-multichain-wallet?retryWrites=true&w=majority
-
-# --- RPC PROVIDERS ---
-RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/<YOUR_ALCHEMY_KEY>
-RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/<YOUR_ALCHEMY_KEY>
-RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
-
-# --- WALLET / DEPLOYER ---
-PRIVATE_KEY=0xYOUR_METAMASK_PRIVATE_KEY   # ⚠️ Chỉ dùng ví testnet!
-
-# --- SMART CONTRACT ADDRESSES (sau khi deploy) ---
-LIMIT_ORDER_ADDRESS_SEPOLIA=0x...
-LIMIT_ORDER_ADDRESS_POLYGON=0x...
-LIMIT_ORDER_ADDRESS_BSC_TESTNET=0x...
-TRADE_TOKEN_ADDRESS_SEPOLIA=0x...
-TRADE_TOKEN_ADDRESS_POLYGON=0x...
-TRADE_TOKEN_ADDRESS_BSC_TESTNET=0x...
-STAKING_REWARD_ADDRESS_SEPOLIA=0x...
-STAKING_REWARD_ADDRESS_POLYGON=0x...
-STAKING_REWARD_ADDRESS_BSC_TESTNET=0x...
-
-# --- IPFS STORAGE ---
-IPFS_PROVIDER=web3storage
-IPFS_API_KEY=eyJhbGciOiJI...  # Token từ web3.storage hoặc Pinata
-
-# --- SECURITY & LOGGING ---
-CORS_ORIGIN=http://localhost:3000
-RATE_LIMIT=60
-LOG_LEVEL=info
-
-# --- ETHERSCAN / POLYGONSCAN / BSCSCAN (để verify contracts) ---
-ETHERSCAN_API_KEY=XXXXXXXXXXXXXX
-POLYGONSCAN_API_KEY=XXXXXXXXXXXXXX
-BSCSCAN_API_KEY=XXXXXXXXXXXXXX
-```
-
-## 📋 Hướng Dẫn Lấy Environment Variables
-
-### 🌍 **1. Environment Config**
-
-#### `NODE_ENV`
-```bash
-NODE_ENV=development  # hoặc production
-```
-**Giá trị**: `development` (cho dev) hoặc `production` (cho production)
-
-#### `PORT`
-```bash
-PORT=4000
-```
-**Giá trị**: Port cho backend server (mặc định: 4000)
-
----
-
-### 🗄️ **2. MongoDB (Database)**
-
-#### `MONGODB_URI`
-```bash
-MONGODB_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/database_name?retryWrites=true&w=majority
-```
-
-**Cách lấy MongoDB URI từ MongoDB Atlas:**
-
-1. **Đăng ký tài khoản MongoDB Atlas**:
-   - Truy cập: [https://www.mongodb.com/atlas](https://www.mongodb.com/atlas)
-   - Click "Try Free" → Đăng ký tài khoản (miễn phí)
-
-2. **Tạo Cluster mới**:
-   - Chọn **FREE tier (M0)**
-   - Chọn Cloud Provider & Region (gần bạn nhất)
-   - Đặt tên cluster (ví dụ: `Cluster0`)
-   - Click "Create Cluster" (mất khoảng 1-3 phút)
-
-3. **Tạo Database User**:
-   - Vào **Database Access** (menu bên trái)
-   - Click "Add New Database User"
-   - Chọn "Password" authentication
-   - Nhập username và password (lưu lại!)
-   - Chọn quyền: "Atlas Admin" hoặc "Read and write to any database"
-   - Click "Add User"
-
-4. **Whitelist IP Address**:
-   - Vào **Network Access** (menu bên trái)
-   - Click "Add IP Address"
-   - Chọn "Allow Access from Anywhere" (0.0.0.0/0) cho development
-   - Hoặc thêm IP cụ thể cho production
-   - Click "Confirm"
-
-5. **Lấy Connection String**:
-   - Vào **Database** → Click "Connect" ở cluster của bạn
-   - Chọn "Connect your application"
-   - Chọn Driver: "Node.js", Version: "5.5 or later"
-   - Copy connection string
-   - **Thay thế**: 
-     - `<password>` → password bạn đã tạo ở bước 3
-     - `<dbname>` → tên database (ví dụ: `trade_dapp`)
-   - Paste vào `.env`: `MONGODB_URI=mongodb+srv://...`
-
-**Ví dụ hoàn chỉnh:**
-```bash
-MONGODB_URI=mongodb+srv://npthanhnhan2003:123456NTN@cluster0.s1cw26e.mongodb.net/trade_dapp?retryWrites=true&w=majority
+evm-multichain-wallet-core/
+├── contracts/                    # 🔹 Smart Contracts (Solidity 0.8.20)
+│   ├── Registry.sol             # Contract registry system
+│   ├── LimitOrder.sol           # Limit order functionality
+│   ├── SwapRouterProxy.sol      # Multi-DEX swap router
+│   ├── UniswapV2Adapter.sol     # Uniswap V2 adapter
+│   ├── StakingRewards.sol       # Epoch-based staking system
+│   ├── TradeToken.sol           # ERC20 token với advanced features
+│   └── MockERC20.sol            # Mock token cho testing
+│
+├── scripts/                     # 🔹 Deployment & Management Scripts
+│   ├── 00_registry.js           # Deploy Registry contract
+│   ├── 01_limitOrder.js         # Deploy LimitOrder contract
+│   ├── 02_swap.js               # Deploy Swap system + seed liquidity
+│   ├── 03_staking.js            # Deploy Staking contract
+│   ├── 04_mint_tradetoken.js    # Mint TradeToken for testing
+│   ├── 05_seedStaking.js        # Seed staking rewards
+│   ├── 06_supported_tokens.js   # Configure supported tokens
+│   └── 07_simple_stake.js       # Simple staking for testing
+│
+├── server/                      # 🔹 Node.js Backend API
+│   ├── config/                  # Configuration management
+│   ├── controllers/             # HTTP request handlers
+│   ├── models/                  # MongoDB/Mongoose models
+│   ├── services/                # Business logic layer
+│   ├── routes/                  # Express routes
+│   ├── middlewares/             # Express middlewares
+│   ├── utils/                   # Helper utilities
+│   └── app.js                   # Express application entry
+│
+├── test/                        # 🔹 Smart Contract Tests
+├── deployments/                 # 🔹 Deployed contract addresses
+├── artifacts/                   # 🔹 Compiled contracts (auto-generated)
+├── hardhat.config.js            # Hardhat configuration
+└── package.json                 # Dependencies & scripts
 ```
 
 ---
 
-### 🌐 **3. RPC (EVM Testnets)**
-
-#### `RPC_SEPOLIA` (Ethereum Sepolia Testnet)
-```bash
-RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
-```
-
-**Cách lấy từ Alchemy:**
-
-1. **Đăng ký Alchemy**:
-   - Truy cập: [https://www.alchemy.com](https://www.alchemy.com)
-   - Click "Sign Up" → Đăng ký tài khoản (miễn phí)
-
-2. **Tạo App mới**:
-   - Đăng nhập → Click "Create App"
-   - Đặt tên app (ví dụ: "EVM Wallet - Sepolia")
-   - Chọn Chain: **"Ethereum"**
-   - Chọn Network: **"Sepolia"** (Testnet)
-   - Click "Create App"
-
-3. **Lấy API Key**:
-   - Click vào app vừa tạo
-   - Trong tab "View Key"
-   - Copy **HTTP URL** (có dạng: `https://eth-sepolia.g.alchemy.com/v2/xxxxx`)
-   - Paste vào `.env`: `RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY`
-
-**Alternative - RPC miễn phí (không cần API key):**
-```bash
-# Public RPC (có thể bị rate limit)
-RPC_SEPOLIA=https://rpc.sepolia.org
-
-# Hoặc Infura (cần đăng ký)
-RPC_SEPOLIA=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
-```
-
-#### `RPC_POLYGON_AMOY` (Polygon Amoy Testnet)
-```bash
-RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
-```
-
-**Cách lấy từ Alchemy:**
-
-1. **Tạo App mới cho Polygon Amoy**:
-   - Trong Alchemy Dashboard → Click "Create App"
-   - Đặt tên app (ví dụ: "EVM Wallet - Polygon Amoy")
-   - Chọn Chain: **"Polygon"**
-   - Chọn Network: **"Polygon Amoy"** (Testnet)
-   - Click "Create App"
-
-2. **Lấy API Key**:
-   - Click vào app vừa tạo
-   - Copy **HTTP URL** (có dạng: `https://polygon-amoy.g.alchemy.com/v2/xxxxx`)
-   - Paste vào `.env`: `RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/YOUR_KEY`
-
-**Alternative - RPC miễn phí:**
-```bash
-# Public RPC (có thể bị rate limit)
-RPC_POLYGON_AMOY=https://rpc-amoy.polygon.technology
-
-# Hoặc DRPC (miễn phí)
-RPC_POLYGON_AMOY=https://polygon-amoy.drpc.org
-```
-
-#### `RPC_BSC_TESTNET` (Binance Smart Chain Testnet)
-```bash
-RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
-```
-
-**BSC Testnet RPC:**
-
-**RPC miễn phí (khuyên dùng):**
-```bash
-# Binance official RPC (khuyên dùng)
-RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
-
-# Alternative endpoints
-RPC_BSC_TESTNET=https://data-seed-prebsc-2-s1.binance.org:8545/
-RPC_BSC_TESTNET=https://data-seed-prebsc-1-s2.binance.org:8545/
-
-# Hoặc nodereal.io (miễn phí)
-RPC_BSC_TESTNET=https://bsc-testnet.nodereal.io/v1/e9a36765eb8a40b9bd12e680a1fd2bc5
-```
-
-**Lưu ý**: BSC Testnet có nhiều RPC endpoints miễn phí và ổn định, không cần API key từ Alchemy/Infura.
-
----
-
-### 👛 **4. Wallet (Testnet Account)**
-
-#### `PRIVATE_KEY`
-```bash
-PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
-```
-
-**⚠️ LƯU Ý QUAN TRỌNG**: 
-- **CHỈ DÙNG VÍ TESTNET**, không bao giờ dùng ví có tiền thật!
-- **KHÔNG BAO GIỜ** commit private key lên Git
-- Tạo ví riêng biệt cho development
-
-**Cách lấy Private Key từ MetaMask:**
-
-1. **Mở MetaMask Extension/App**
-
-2. **Export Private Key**:
-   - Click vào avatar/icon account ở góc trên
-   - Chọn **"Account details"**
-   - Click **"Export Private Key"**
-   - Nhập password của MetaMask
-   - Copy private key (có dạng: `0x1234567890abcdef...`)
-
-3. **Paste vào .env**: 
-   ```bash
-   PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
-   ```
-
-**Tạo ví testnet mới (Khuyên dùng):**
-
-1. **Tạo Account mới trong MetaMask**:
-   - MetaMask → Click menu (3 dấu gạch ngang)
-   - Chọn **"Create Account"** hoặc **"Add Account"**
-   - Đặt tên: "Testnet Wallet" hoặc "Development"
-   - Click "Create"
-
-2. **Lấy Testnet Tokens** (để deploy contracts):
-   
-   **Sepolia ETH**:
-   - Truy cập: [https://sepoliafaucet.com](https://sepoliafaucet.com)
-   - Hoặc: [https://www.alchemy.com/faucets/ethereum-sepolia](https://www.alchemy.com/faucets/ethereum-sepolia)
-   - Nhập địa chỉ ví → Click "Send Me ETH"
-   - Chờ 1-5 phút để nhận ETH
-
-   **Polygon Amoy MATIC**:
-   - Truy cập: [https://faucet.polygon.technology](https://faucet.polygon.technology)
-   - Chọn "Polygon Amoy Testnet"
-   - Nhập địa chỉ ví → Click "Submit"
-   - Chờ 1-5 phút để nhận MATIC
-
-   **BSC Testnet BNB**:
-   - Truy cập: [https://testnet.bnbchain.org/faucet-smart](https://testnet.bnbchain.org/faucet-smart)
-   - Nhập địa chỉ ví → Click "Give me BNB"
-   - Hoặc: [https://testnet.binance.org/faucet-smart](https://testnet.binance.org/faucet-smart)
-   - Chờ 1-5 phút để nhận BNB testnet
-
-3. **Export Private Key của ví testnet mới** (theo bước 2 ở trên)
-
----
-
-### 🏗️ **5. Smart Contract Addresses (sẽ có sau khi deploy)**
-
-#### `LIMIT_ORDER_ADDRESS_SEPOLIA`
-```bash
-LIMIT_ORDER_ADDRESS_SEPOLIA=0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
-```
-
-#### `LIMIT_ORDER_ADDRESS_POLYGON`
-```bash
-LIMIT_ORDER_ADDRESS_POLYGON=0x8ba1f109551bD432803012645Hac136c0567890
-```
-
-**Cách lấy Contract Addresses:**
-
-1. **Deploy Contracts**:
-   ```bash
-   # Deploy lên Sepolia
-   npx hardhat run scripts/deploy.js --network sepolia
-   
-   # Deploy lên Polygon Amoy
-   npx hardhat run scripts/deploy.js --network polygonAmoy
-   ```
-
-2. **Copy Address từ Console Output**:
-   - Sau khi deploy thành công, bạn sẽ thấy output như:
-   ```
-   ✅ LimitOrder deployed to: 0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
-   ```
-   - Copy địa chỉ này
-
-3. **Paste vào .env**:
-   ```bash
-   LIMIT_ORDER_ADDRESS_SEPOLIA=0x742d35Cc6634C0532925a3b8D4C9db4c2c4b1234
-   LIMIT_ORDER_ADDRESS_POLYGON=0x8ba1f109551bD432803012645Hac136c0567890
-   ```
-
-**Lưu ý**: Để trống cho đến khi deploy contracts xong!
-
----
-
-### 📦 **6. IPFS Storage**
-
-#### `IPFS_PROVIDER`
-```bash
-IPFS_PROVIDER=web3storage  # hoặc pinata
-```
-
-#### `IPFS_API_KEY`
-```bash
-IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-**Cách lấy từ Web3.Storage (Miễn phí, Khuyên dùng):**
-
-1. **Đăng ký tài khoản**:
-   - Truy cập: [https://web3.storage](https://web3.storage)
-   - Click "Sign Up" → Đăng ký bằng email hoặc GitHub
-   - Xác nhận email
-
-2. **Tạo API Token**:
-   - Đăng nhập → Click **"Create API Token"** ở dashboard
-   - Đặt tên token (ví dụ: "EVM Wallet Development")
-   - Click "Create"
-   - **Copy token ngay** (chỉ hiện 1 lần! Lưu lại)
-
-3. **Paste vào .env**:
-   ```bash
-   IPFS_PROVIDER=web3storage
-   IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjpleGFtcGxl...
-   ```
-
-**Alternative - Pinata:**
-
-1. **Đăng ký Pinata**:
-   - Truy cập: [https://pinata.cloud](https://pinata.cloud)
-   - Click "Sign Up" → Đăng ký tài khoản
-
-2. **Tạo API Key**:
-   - Đăng nhập → Vào **"API Keys"**
-   - Click **"New Key"**
-   - Đặt tên key
-   - Chọn quyền: "PinFileToIPFS", "PinJSONToIPFS"
-   - Click "Create Key"
-   - Copy **JWT Token**
-
-3. **Cấu hình trong .env**:
-   ```bash
-   IPFS_PROVIDER=pinata
-   IPFS_API_KEY=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-   ```
-
----
-
-### 🔍 **7. Verify (Optional - cho deploy scripts)**
-
-#### `ETHERSCAN_API_KEY`
-```bash
-ETHERSCAN_API_KEY=ABC123XYZ789DEF456GHI012
-```
-
-**Cách lấy Etherscan API Key:**
-
-1. **Đăng ký Etherscan**:
-   - Truy cập: [https://etherscan.io/register](https://etherscan.io/register)
-   - Điền thông tin → Click "Create Account"
-   - Xác nhận email
-
-2. **Tạo API Key**:
-   - Đăng nhập → Click **"My Account"** (góc trên bên phải)
-   - Vào tab **"API-KEYs"**
-   - Click **"Add"** để tạo API key mới
-   - Đặt tên (ví dụ: "Development")
-   - Click "Create"
-   - Copy **API Key Token**
-
-3. **Paste vào .env**:
-   ```bash
-   ETHERSCAN_API_KEY=ABC123XYZ789DEF456GHI012JKL345MNO678
-   ```
-
-#### `POLYGONSCAN_API_KEY`
-```bash
-POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123
-```
-
-**Cách lấy Polygonscan API Key:**
-
-1. **Đăng ký Polygonscan**:
-   - Truy cập: [https://polygonscan.com/register](https://polygonscan.com/register)
-   - Điền thông tin → Click "Create Account"
-   - Xác nhận email
-
-2. **Tạo API Key**:
-   - Đăng nhập → Click **"My Account"** (góc trên bên phải)
-   - Vào tab **"API-KEYs"**
-   - Click **"Add"** để tạo API key mới
-   - Đặt tên (ví dụ: "Development")
-   - Click "Create"
-   - Copy **API Key Token**
-
-3. **Paste vào .env**:
-   ```bash
-   POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123EFG456
-   ```
-
-#### `BSCSCAN_API_KEY`
-```bash
-BSCSCAN_API_KEY=EFG456HIJ789KLM012NOP345QRS678
-```
-
-**Cách lấy BSCScan API Key:**
-
-1. **Đăng ký BSCScan**:
-   - Truy cập: [https://bscscan.com/register](https://bscscan.com/register)
-   - Điền thông tin → Click "Create Account"
-   - Xác nhận email
-
-2. **Tạo API Key**:
-   - Đăng nhập → Click **"My Account"** (góc trên bên phải)
-   - Vào tab **"API-KEYs"**
-   - Click **"Add"** để tạo API key mới
-   - Đặt tên (ví dụ: "Development")
-   - Click "Create"
-   - Copy **API Key Token**
-
-3. **Paste vào .env**:
-   ```bash
-   BSCSCAN_API_KEY=EFG456HIJ789KLM012NOP345QRS678TUV901
-   ```
-
-**Lưu ý**: API keys này chỉ cần khi bạn muốn verify contracts trên explorer. Có thể để trống nếu không cần verify.
-
----
-
-### 🚦 **8. Rate Limiting**
-
-#### `RATE_LIMIT_WINDOW_MS`
-```bash
-RATE_LIMIT_WINDOW_MS=900000  # 15 phút = 900,000 milliseconds
-```
-
-**Giá trị**: Thời gian window tính bằng milliseconds
-- `60000` = 1 phút
-- `300000` = 5 phút
-- `900000` = 15 phút (khuyên dùng)
-
-#### `RATE_LIMIT_MAX_REQUESTS`
-```bash
-RATE_LIMIT_MAX_REQUESTS=100  # Số requests tối đa trong window
-```
-
-**Giá trị**: Số lượng requests tối đa trong một window
-- `60` = 60 requests
-- `100` = 100 requests (khuyên dùng)
-- `200` = 200 requests
-
-**Giải thích**: Nếu set `RATE_LIMIT_WINDOW_MS=900000` và `RATE_LIMIT_MAX_REQUESTS=100`, nghĩa là cho phép tối đa 100 requests trong 15 phút từ cùng 1 IP.
-
----
-
-### 🛡️ **9. Security & Logs**
-
-#### `CORS_ORIGIN`
-```bash
-CORS_ORIGIN=http://localhost:3000
-```
-
-**Giá trị**: URL của frontend application
-- Development: `http://localhost:3000`
-- Multiple origins: `http://localhost:3000,https://yourdomain.com`
-- Production: `https://yourdomain.com`
-
-**Lưu ý**: Nếu frontend chạy trên port khác, thay đổi cho phù hợp.
-
-#### `LOG_LEVEL`
-```bash
-LOG_LEVEL=info
-```
-
-**Giá trị có thể**:
-- `error` - Chỉ log lỗi
-- `warn` - Log cảnh báo và lỗi
-- `info` - Log thông tin, cảnh báo và lỗi (khuyên dùng cho production)
-- `debug` - Log chi tiết (cho development)
-- `trace` - Log tất cả (rất chi tiết, chỉ cho debug)
-
----
-
-### 📝 **File .env Hoàn Chỉnh Mẫu**
-
-```bash
-# ===== Environment Config =====
-NODE_ENV=development
-PORT=4000
-
-# ===== MongoDB (Database) =====
-MONGODB_URI=mongodb+srv://npthanhnhan2003:123456NTN@cluster0.s1cw26e.mongodb.net/trade_dapp?retryWrites=true&w=majority
-
-# ===== RPC (EVM Testnets) =====
-RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/abc123def456ghi789jkl012mno345pqr678
-RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/xyz789uvw456rst123tuv456wxy789
-RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
-
-# ===== Wallet (Testnet Account) =====
-PRIVATE_KEY=0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
-
-# ===== Smart Contract Addresses (sẽ có sau khi deploy) =====
-LIMIT_ORDER_ADDRESS_SEPOLIA=
-LIMIT_ORDER_ADDRESS_POLYGON=
-LIMIT_ORDER_ADDRESS_BSC_TESTNET=
-
-# ===== IPFS Storage =====
-IPFS_PROVIDER=web3storage
-IPFS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6ZXRocjpleGFtcGxl...
-
-# ===== Verify (optional for deploy scripts) =====
-ETHERSCAN_API_KEY=ABC123XYZ789DEF456GHI012JKL345MNO678
-POLYGONSCAN_API_KEY=PQR901STU234VWX567YZA890BCD123EFG456
-BSCSCAN_API_KEY=EFG456HIJ789KLM012NOP345QRS678TUV901
-
-# ===== Rate Limiting =====
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
-
-# ===== Security & Logs =====
-CORS_ORIGIN=http://localhost:3000
-LOG_LEVEL=info
-```
-
----
-
-## 🚀 Bắt Đầu Nhanh
+## 🚀 Quick Start
 
 ### 1. Cài Đặt Dependencies
 ```bash
+git clone <repository-url>
+cd evm-multichain-wallet-core
+
 npm install
 ```
 
 ### 2. Cấu Hình Environment
 ```bash
-# Copy file mẫu và chỉnh sửa
+# Tạo file .env
 cp .env.example .env
-# Điền thông tin RPC, MongoDB, private key vào .env
+
+# Chỉnh sửa .env với thông tin của bạn:
+# - PRIVATE_KEY (testnet wallet)
+# - RPC endpoints (Alchemy/Infura)
+# - MongoDB URI
+# - IPFS API keys (optional)
 ```
 
 ### 3. Compile Smart Contracts
@@ -642,35 +92,28 @@ cp .env.example .env
 npm run compile
 ```
 
-### 4. Deploy Contracts lên Testnet
+### 4. Deploy Contracts (Sepolia Testnet)
 ```bash
-# Deploy lên Sepolia
-npx hardhat run scripts/deploy.js --network sepolia
+# Bước 1: Deploy Registry
+npx hardhat run scripts/00_registry.js --network sepolia
 
-# Deploy lên Polygon Amoy
-npx hardhat run scripts/deploy.js --network polygonAmoy
+# Bước 2: Deploy LimitOrder
+npx hardhat run scripts/01_limitOrder.js --network sepolia
 
-# Deploy lên BSC Testnet
-npx hardhat run scripts/deploy.js --network bscTestnet
+# Bước 3: Deploy Swap System + Seed Liquidity
+npx hardhat run scripts/02_swap.js --network sepolia
 
-# Cập nhật contract addresses vào .env
+# Bước 4: Deploy Staking
+npx hardhat run scripts/03_staking.js --network sepolia
+
+# Bước 5: Mint TradeToken cho testing
+npx hardhat run scripts/04_mint_tradetoken.js --network sepolia
+
+# Bước 6: Seed Staking (tạo data test)
+npx hardhat run scripts/07_simple_stake.js --network sepolia
 ```
 
-### 5. Verify Contracts
-```bash
-npx hardhat run scripts/verify.js --network sepolia
-```
-
-### 6. Chạy Tests
-```bash
-# Test smart contracts
-npx hardhat test
-
-# Test backend API
-npm test
-```
-
-### 7. Khởi Động Backend Server
+### 5. Khởi Động Backend Server
 ```bash
 # Development mode
 npm run dev
@@ -679,111 +122,227 @@ npm run dev
 npm start
 ```
 
----
-
-## 🧱 Trách Nhiệm Từng Layer
-
-### Smart Contracts
-- **LimitOrder.sol**: Core logic cho limit orders, events `OrderCreated/Cancelled/Filled`
-- **TradeToken.sol**: ERC20 token để test trading
-- **StakingRewards.sol**: Staking mechanism với rewards
-- **SystemAdmin.sol**: Admin functions như pause/unpause
-
-### Backend Layers
-
-#### Controllers
-- **HTTP layer mỏng**: validate input, gọi services, map errors → HTTP status
-- **Pagination**: metadata cho list endpoints
-- Ví dụ: `order.controller.js`, `transaction.controller.js`
-
-#### Services  
-- **Business logic**: tạo/hủy/cập nhật orders, transaction lifecycle
-- Gọi adapters (`web3`, `ipfs`) và models, enforce business rules
-- Stateless khi có thể
-
-#### Models
-- **MongoDB/Mongoose entities**: chỉ persistence và mapping
-- **Không có business rules** - chỉ database operations
-- Repository pattern cho clean separation
-
-#### Middleware
-- **Error handler**: consistent JSON errors với trace ID
-- **Rate limiting**: bảo vệ endpoints khỏi abuse
-- **CORS**: whitelist allowed origins
-
-#### Config
-- **Centralized configuration**: env parsing, chain registry, logger
-- **Single source of truth** cho contract addresses & RPC endpoints
-- Support multiple chains (Sepolia, Polygon Amoy)
+Server sẽ chạy tại: `http://localhost:4000`
 
 ---
 
-## 🌐 Multichain & Chain Registry
+## 📋 Environment Variables
 
-- `backend/config/chains.js` export **array các chains được enable** (Sepolia, Polygon Amoy, BSC Testnet)
-- Mỗi chain có: chainId, name, RPC endpoints, explorer, contract addresses
-- Auto-detect enabled chains dựa trên RPC configuration
-- Explorer helpers tạo links cho tx/address theo từng chain
+Tạo file `.env` với các biến sau:
+
+```bash
+# ===== General =====
+NODE_ENV=development
+PORT=4000
+
+# ===== Database =====
+MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/database
+
+# ===== Blockchain RPC =====
+RPC_SEPOLIA=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+RPC_BSC_TESTNET=https://data-seed-prebsc-1-s1.binance.org:8545/
+RPC_POLYGON_AMOY=https://polygon-amoy.g.alchemy.com/v2/YOUR_KEY
+
+# ===== Wallet =====
+PRIVATE_KEY=0x...  # ⚠️ Chỉ dùng testnet wallet!
+
+# ===== IPFS (Optional) =====
+IPFS_PROVIDER=web3storage
+IPFS_API_KEY=eyJhbGciOiJI...
+
+# ===== Explorer API Keys (Optional - for verification) =====
+ETHERSCAN_API_KEY=ABC123...
+BSCSCAN_API_KEY=XYZ789...
+POLYGONSCAN_API_KEY=DEF456...
+
+# ===== Security =====
+CORS_ORIGIN=http://localhost:3000
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+LOG_LEVEL=info
+```
+
+### 🔗 Hướng Dẫn Lấy API Keys
+
+#### MongoDB Atlas (Database)
+1. Đăng ký tại [MongoDB Atlas](https://www.mongodb.com/atlas)
+2. Tạo free cluster (M0)
+3. Tạo database user với password
+4. Whitelist IP (0.0.0.0/0 cho development)
+5. Copy connection string → paste vào `MONGO_URI`
+
+#### Alchemy (RPC Provider)
+1. Đăng ký tại [Alchemy](https://www.alchemy.com)
+2. Tạo apps cho Sepolia và Polygon Amoy
+3. Copy HTTP URLs → paste vào `RPC_SEPOLIA`, `RPC_POLYGON_AMOY`
+
+#### Web3.Storage (IPFS)
+1. Đăng ký tại [Web3.Storage](https://web3.storage)
+2. Tạo API token
+3. Copy token → paste vào `IPFS_API_KEY`
 
 ---
 
 ## 🔗 Smart Contracts
 
-### Contracts Chính
-- **`LimitOrder.sol`**: Core logic & events (`OrderCreated`, `OrderCancelled`, `OrderFilled`)
-- **`TradeToken.sol`**: ERC20 token để test trading
-- **`StakingRewards.sol`**: Staking mechanism với rewards
-- **`SystemAdmin.sol`**: Admin functions (`pause()` / `unpause()`)
-- **`ReceiptGenerator.sol`**: Tạo receipts cho transactions
-- **`DexAdapterV2.sol`**: Adapter cho DEX integrations
-- **`SwapRouterProxy.sol`**: Proxy cho swap operations
+### Core Contracts
 
-### Commands
-```bash
-# Compile contracts
-npm run compile
+#### **Registry.sol**
+- **Mục đích**: Quản lý địa chỉ tất cả contracts khác
+- **Functions**: `registerContract()`, `getContract()`, `getAllContracts()`
+- **Benefits**: Backend tự động discover addresses, dễ upgrade
 
-# Deploy lên Sepolia
-npx hardhat run scripts/deploy.js --network sepolia
+#### **LimitOrder.sol**
+- **Mục đích**: Tạo và quản lý limit orders
+- **Features**: EIP-712 signatures, order matching, expiration
+- **Events**: `OrderCreated`, `OrderCancelled`, `OrderFilled`
 
-# Deploy lên Polygon Amoy  
-npx hardhat run scripts/deploy.js --network polygonAmoy
+#### **SwapRouterProxy.sol**
+- **Mục đích**: Unified router cho multiple DEX
+- **Features**: Protocol fees, adapter system, token whitelisting
+- **Supported DEX**: Uniswap V2, PancakeSwap, SushiSwap
 
-# Deploy lên BSC Testnet
-npx hardhat run scripts/deploy.js --network bscTestnet
+#### **UniswapV2Adapter.sol**
+- **Mục đích**: Adapter cho Uniswap V2 và forks
+- **Features**: Auto path finding, slippage protection
 
-# Verify contracts
-npx hardhat run scripts/verify.js --network sepolia
+#### **StakingRewards.sol**
+- **Mục đích**: Stake tokens để nhận rewards
+- **Features**: Epoch-based rewards, lock periods, emergency withdraw
+- **Tiers**: Bronze/Silver/Gold với discount benefits
 
-# Run tests
-npx hardhat test
+#### **TradeToken.sol**
+- **Mục đích**: Native token của protocol
+- **Features**: ERC20 + mint/burn + pausable + capped supply
+
+### Contract Addresses (Sepolia Testnet)
+
+```javascript
+{
+  "registry": "0xA9816eEa32Eb99fcd34Bb10D3ccdF527c2024933",
+  "limitOrder": "0x2a7F6A779f7dbF3222f97e8EC397B62ac4fA5DB2",
+  "swapRouter": "0x2F752CE9a2709871Eb0e696dEFC985e12912a2F1",
+  "uniswapV2Adapter": "0x62ebeA95a95326dDcb7b83D0572CFb41C4c14809",
+  "stakingRewards": "0x38255A9d647229C641c9addD4e7A55724F9F0F71",
+  "tradeToken": "0x9d354189653E8885E14B1E684B150e2e5c338370",
+  "weth": "0xd063FE3D9782296503Aef5eA0B4374C1C11f5119",
+  "mockLink": "0x76519Fe93AA139e45813BA73FBBffc35A39b13B0"
+}
 ```
 
-Sau khi deploy, cập nhật contract addresses vào `.env`.
+---
+
+## 📜 Deployment Scripts
+
+### Thứ Tự Deploy (Quan Trọng!)
+
+```bash
+# 1. Registry (foundation)
+npx hardhat run scripts/00_registry.js --network sepolia
+
+# 2. LimitOrder
+npx hardhat run scripts/01_limitOrder.js --network sepolia
+
+# 3. Swap System (SwapRouter + Adapters + Mock DEX + Liquidity)
+npx hardhat run scripts/02_swap.js --network sepolia
+
+# 4. Staking System
+npx hardhat run scripts/03_staking.js --network sepolia
+
+# 5. Mint TradeToken for testing
+npx hardhat run scripts/04_mint_tradetoken.js --network sepolia
+
+# 6. Seed staking data (optional)
+npx hardhat run scripts/07_simple_stake.js --network sepolia
+```
+
+### Script Functions
+
+| Script | Mục Đích | Output |
+|--------|----------|---------|
+| `00_registry.js` | Deploy Registry contract | Registry address |
+| `01_limitOrder.js` | Deploy LimitOrder + register | LimitOrder address |
+| `02_swap.js` | Deploy swap system + seed liquidity | SwapRouter, Adapters, Mock DEX |
+| `03_staking.js` | Deploy StakingRewards | StakingRewards address |
+| `04_mint_tradetoken.js` | Mint TradeToken cho users | Mint transactions |
+| `07_simple_stake.js` | Stake tokens để test UI | Staking data |
+
+### Environment Variables cho Scripts
+
+```bash
+# Swap script customization
+SEED_TRADE=1000          # TRADE tokens per pool
+SEED_LINK=1000           # mLINK tokens per pool  
+SEED_WETH=0.05           # WETH per pool
+SEED_ETH_FOR_WETH=0.15   # Total ETH to wrap
+
+# Staking script customization
+STAKE_AMOUNT=1000        # Amount to stake for testing
+```
 
 ---
 
-> Write endpoints require **EIP‑712** verification; Admin endpoints require `role=admin`.
+## 🌐 Backend API
 
----
+### Server Architecture
 
-## 🔐 Authentication - EIP‑712 Flow
+```
+server/
+├── config/
+│   ├── chains.js        # Multi-chain configuration
+│   ├── env.js          # Environment validation
+│   ├── logger.js       # Logging setup
+│   └── DBConfig.js     # MongoDB connection
+├── controllers/        # HTTP handlers (thin layer)
+├── services/          # Business logic
+├── models/            # Database models
+├── routes/            # Express routes
+├── middlewares/       # Cross-cutting concerns
+└── utils/             # Helper functions
+```
 
-1. **Request nonce**: `GET /api/auth/nonce?address=0x...`
-2. **Sign typed data**: Client ký message với MetaMask
-3. **Verify signature**: `POST /api/auth/verify` với signature
-4. **Session/JWT**: Server verify và issue token
+### API Endpoints
 
-**Bảo mật**: Nonce có TTL, chống replay attacks, chỉ dùng 1 lần.
+#### Authentication
+```
+POST /api/auth/nonce       # Get nonce for EIP-712 signing
+POST /api/auth/verify      # Verify signature & get session
+```
 
----
+#### Orders
+```
+GET    /api/orders         # List user orders
+POST   /api/orders         # Create new order
+DELETE /api/orders/:id     # Cancel order
+GET    /api/orders/:id     # Get order details
+```
 
-## 📦 IPFS Receipts
+#### Transactions
+```
+GET /api/transactions      # List transactions
+GET /api/transactions/:hash # Get transaction details
+```
 
-- Backend tạo receipt metadata sau khi transaction confirm và **pin lên IPFS**
-- Lưu mapping `txHash ↔ CID` trong database
-- Expose public endpoints để retrieve receipts
-- Support Web3.Storage hoặc Pinata làm IPFS provider
+#### Receipts
+```
+GET /api/receipts          # List IPFS receipts
+GET /api/receipts/:hash    # Get receipt by txHash
+```
+
+#### Users
+```
+GET    /api/users/profile  # Get user profile
+PUT    /api/users/profile  # Update profile
+GET    /api/users/stats    # Get user statistics
+```
+
+### Authentication Flow (EIP-712)
+
+1. **Frontend** request nonce: `GET /api/auth/nonce?address=0x...`
+2. **User** signs typed data với MetaMask
+3. **Frontend** gửi signature: `POST /api/auth/verify`
+4. **Backend** verify signature → issue JWT token
+5. **Subsequent requests** dùng JWT trong Authorization header
 
 ---
 
@@ -791,119 +350,427 @@ Sau khi deploy, cập nhật contract addresses vào `.env`.
 
 ### Smart Contract Tests
 ```bash
-# Hardhat tests cho contract logic & events
+# Run all tests
 npx hardhat test
+
+# Run specific test
+npx hardhat test test/LimitOrder.business.test.js
+
+# Run with gas report
+REPORT_GAS=true npx hardhat test
+
+# Run coverage
+npx hardhat coverage
 ```
 
-### Backend API Tests  
+### Backend API Tests
 ```bash
-# Jest tests cho API endpoints
+# Run Jest tests
 npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run specific test suite
+npm test -- --testPathPattern=order
 ```
 
-### Test Coverage
-- **Unit tests**: Contract functions và business logic
-- **Integration tests**: API endpoints với database
-- **E2E scenarios**: Full flow từ create order → execute → receipt
-
 ---
 
-## 🛡️ Bảo Mật
+## 🔧 Development
 
-- **EIP‑712** cho tất cả sensitive actions; validate domain/version/chainId
-- **Không log** private keys hoặc raw signatures; mask addresses khi cần
-- **CORS whitelist** + rate limiting; SSL cho database
-- **Secrets** trong `.env` (không commit); sử dụng environment variables
-- **Pausable state** cả on-chain và API level
+### Prerequisites
+- **Node.js** ≥ 18.x
+- **npm** ≥ 9.x
+- **MongoDB** ≥ 5.0 (local hoặc Atlas)
+- **MetaMask** với testnet tokens
 
----
+### Local Development Setup
 
-## ⚙️ Deployment
-
-### Production Deployment
 ```bash
-# Deploy contracts lên mainnet
-npx hardhat run scripts/deploy.js --network mainnet
+# 1. Clone & install
+git clone <repo-url>
+cd evm-multichain-wallet-core
+npm install
 
-# Start backend server
-NODE_ENV=production PORT=4000 npm start
+# 2. Setup environment
+cp .env.example .env
+# Edit .env với your keys
+
+# 3. Start MongoDB (nếu local)
+mongod --dbpath /path/to/db
+
+# 4. Compile contracts
+npm run compile
+
+# 5. Deploy to testnet
+npx hardhat run scripts/00_registry.js --network sepolia
+# ... (follow deployment order)
+
+# 6. Start backend
+npm run dev
 ```
+
+### Development Workflow
+
+1. **Smart Contract Changes**:
+   ```bash
+   # Edit contracts/*.sol
+   npm run compile
+   npx hardhat test
+   # Deploy to testnet
+   ```
+
+2. **Backend Changes**:
+   ```bash
+   # Edit server/**/*.js
+   npm test
+   npm run dev
+   ```
+
+3. **Integration Testing**:
+   ```bash
+   # Test full flow
+   npm run test:integration
+   ```
+
+---
+
+## 🌍 Multichain Support
+
+### Supported Networks
+
+| Network | Chain ID | RPC | Explorer | Faucet |
+|---------|----------|-----|----------|--------|
+| **Sepolia** | 11155111 | Alchemy/Infura | [etherscan.io](https://sepolia.etherscan.io) | [sepoliafaucet.com](https://sepoliafaucet.com) |
+| **BSC Testnet** | 97 | Binance RPC | [bscscan.com](https://testnet.bscscan.com) | [bnbchain.org](https://testnet.bnbchain.org/faucet-smart) |
+| **Polygon Amoy** | 80002 | Alchemy | [polygonscan.com](https://amoy.polygonscan.com) | [polygon.technology](https://faucet.polygon.technology) |
+
+### Chain Configuration
+
+Trong `server/config/chains.js`:
+```javascript
+export const CHAINS = {
+  11155111: {
+    name: "Sepolia",
+    rpc: process.env.RPC_SEPOLIA,
+    explorer: "https://sepolia.etherscan.io",
+    nativeToken: { symbol: "ETH", decimals: 18 }
+  },
+  97: {
+    name: "BSC Testnet", 
+    rpc: process.env.RPC_BSC_TESTNET,
+    explorer: "https://testnet.bscscan.com",
+    nativeToken: { symbol: "BNB", decimals: 18 }
+  }
+};
+```
+
+---
+
+## 💰 Testnet Tokens
+
+### Lấy Testnet Tokens (Miễn Phí)
+
+#### Sepolia ETH
+- **Faucet**: [sepoliafaucet.com](https://sepoliafaucet.com)
+- **Alternative**: [alchemy.com/faucets](https://www.alchemy.com/faucets/ethereum-sepolia)
+- **Amount**: 0.5 ETH/day
+- **Requirements**: GitHub account
+
+#### BSC Testnet BNB  
+- **Faucet**: [testnet.bnbchain.org](https://testnet.bnbchain.org/faucet-smart)
+- **Amount**: 0.1 BNB/day
+- **Requirements**: BNB wallet address
+
+#### Polygon Amoy MATIC
+- **Faucet**: [faucet.polygon.technology](https://faucet.polygon.technology)
+- **Amount**: 1 MATIC/day
+- **Requirements**: Alchemy account (free)
+
+---
+
+## 🔐 Security
+
+### Smart Contract Security
+- ✅ **OpenZeppelin** contracts cho security patterns
+- ✅ **ReentrancyGuard** cho tất cả state-changing functions
+- ✅ **Pausable** emergency controls
+- ✅ **Ownable** access control
+- ✅ **SafeERC20** cho token transfers
+
+### Backend Security
+- ✅ **EIP-712** authentication (no passwords)
+- ✅ **Rate limiting** chống spam
+- ✅ **CORS** whitelist
+- ✅ **Input validation** và sanitization
+- ✅ **Error handling** không leak sensitive info
 
 ### Best Practices
-- Chạy sau reverse proxy (Nginx)
-- Configure health checks tại `/health`
-- Centralize logs và monitoring
-- Backup database thường xuyên
+- ⚠️ **Never commit private keys**
+- ⚠️ **Use testnet wallets only** cho development
+- ⚠️ **Verify contracts** trên explorer
+- ⚠️ **Test thoroughly** trước khi lên mainnet
+- ⚠️ **Monitor gas prices** và optimize
 
 ---
 
-## 🧭 Troubleshooting
+## 📊 Features Deep Dive
 
-### Các Lỗi Thường Gặp
+### 🎯 Limit Orders
+```solidity
+// Tạo limit order
+function createOrder(
+    address tokenIn,
+    address tokenOut, 
+    uint256 amountIn,
+    uint256 minAmountOut,
+    uint256 limitPrice,
+    uint256 deadline
+) external returns (uint256 orderId);
 
-- **Contract deployment failed** → Check RPC endpoint, private key, gas limit
-- **Backend không start** → Kiểm tra MongoDB connection, port conflicts
-- **Transaction failed** → Check gas price, nonce, contract address
-- **IPFS upload failed** → Verify API key, network connection
+// Hủy order
+function cancelOrder(uint256 orderId) external;
 
-### Debug Commands
-```bash
-# Check Hardhat networks
-npx hardhat run scripts/deploy.js --network sepolia --dry-run
+// Fill order (bất kỳ ai)
+function fillOrder(uint256 orderId, uint256 amountOut) external;
+```
 
-# Test MongoDB connection
-node -e "require('./backend/config/DBConfig.js')"
+### 🔄 Token Swap
+```solidity
+// Swap exact tokens for tokens
+function swapExactTokensForTokens(SwapParams calldata params) 
+    external returns (uint256 amountOut);
 
-# Check contract addresses
-npx hardhat console --network sepolia
+// Get quote
+function getAmountOut(
+    address tokenIn,
+    address tokenOut,
+    uint256 amountIn,
+    DexType dexType,
+    bytes calldata extraData
+) external view returns (uint256 amountOut);
+```
+
+### 💎 Staking System
+```solidity
+// Stake tokens
+function stake(uint256 amount) external;
+
+// Withdraw staked tokens
+function withdraw(uint256 amount) external;
+
+// Claim rewards
+function claimRewards() external;
+
+// Emergency withdraw (with penalty)
+function emergencyWithdraw(uint256 amount) external;
 ```
 
 ---
 
-## 🤝 Đóng Góp
+## 🛠️ Troubleshooting
 
-### Quy Tắc
-- **Branch naming**: `feature/<scope>`, `fix/<scope>`
-- **PR nhỏ**: <300 LOC với tests và docs
-- **Sync config**: Cập nhật `.env.example` khi thay đổi contracts/RPCs
+### Common Issues
 
-### Development Flow
-1. Fork repository
-2. Tạo feature branch
-3. Implement + tests
-4. Update documentation
-5. Submit PR với mô tả chi tiết
+#### "Insufficient funds for intrinsic transaction cost"
+**Nguyên nhân**: Không đủ ETH/BNB/MATIC để trả gas
+**Giải pháp**: Lấy testnet tokens từ faucets
+
+#### "Router: token chưa support"
+**Nguyên nhân**: Token chưa được add vào SwapRouter whitelist
+**Giải pháp**: 
+```bash
+npx hardhat run scripts/06_supported_tokens.js --network sepolia
+```
+
+#### "Router: adapter chưa cấu hình"
+**Nguyên nhân**: DEX adapter chưa được set
+**Giải pháp**: Chạy lại `scripts/02_swap.js`
+
+#### "Start time in past" (Staking)
+**Nguyên nhân**: Epoch start time đã qua
+**Giải pháp**: Dùng `scripts/07_simple_stake.js` thay vì epoch system
+
+#### Backend không start
+**Nguyên nhân**: MongoDB connection failed
+**Giải pháp**: Check `MONGO_URI` trong `.env`
+
+### Debug Commands
+
+```bash
+# Check network connection
+npx hardhat run --network sepolia -e "console.log(await ethers.provider.getNetwork())"
+
+# Check deployer balance  
+npx hardhat run --network sepolia -e "
+const [signer] = await ethers.getSigners();
+const balance = await ethers.provider.getBalance(signer.address);
+console.log('Balance:', ethers.utils.formatEther(balance), 'ETH');
+"
+
+# Check contract exists
+npx hardhat run --network sepolia -e "
+const code = await ethers.provider.getCode('0x...');
+console.log('Contract exists:', code !== '0x');
+"
+
+# MongoDB connection test
+node -e "require('./server/config/DBConfig.js')"
+```
 
 ---
 
-## ✅ Definition of Done
+## 📚 API Documentation
+
+### Swagger UI
+Sau khi start server, truy cập: `http://localhost:4000/api-docs`
+
+### Example API Calls
+
+#### Create Limit Order
+```javascript
+POST /api/orders
+{
+  "tokenIn": "0x9d354189653E8885E14B1E684B150e2e5c338370",
+  "tokenOut": "0xd063FE3D9782296503Aef5eA0B4374C1C11f5119", 
+  "amountIn": "1000000000000000000",
+  "minAmountOut": "50000000000000000",
+  "limitPrice": "20000000000000000",
+  "deadline": 1735123200,
+  "signature": "0x...",
+  "nonce": 12345
+}
+```
+
+#### Get User Orders
+```javascript
+GET /api/orders?address=0x...
+Authorization: Bearer <jwt-token>
+```
+
+---
+
+## 🚀 Production Deployment
 
 ### Smart Contracts
-- ✅ Contracts compiled thành công
-- ✅ Deploy lên ít nhất 2 testnets (Sepolia, Polygon Amoy)
-- ✅ Verify trên block explorers
-- ✅ Unit tests coverage > 80%
+```bash
+# Deploy to mainnet (⚠️ Use mainnet wallet with real ETH)
+npx hardhat run scripts/00_registry.js --network mainnet
+npx hardhat run scripts/01_limitOrder.js --network mainnet
+# ... (follow same order)
 
-### Backend
-- ✅ Controllers mỏng; business logic trong services
-- ✅ Database operations trong models
-- ✅ API endpoints hoạt động với proper error handling
-- ✅ Configuration đúng cho multichain
+# Verify contracts
+npx hardhat verify --network mainnet <CONTRACT_ADDRESS> [CONSTRUCTOR_ARGS]
+```
 
-### Integration
-- ✅ Contract addresses configured trong backend config
-- ✅ Event listeners hoạt động (nếu implement)
-- ✅ IPFS receipts tạo valid CIDs
-- ✅ End-to-end flow hoạt động trên testnet
+### Backend Server
+```bash
+# Production environment
+NODE_ENV=production
+PORT=4000
 
-## 📚 Tài Liệu Tham Khảo
+# Start with PM2 (recommended)
+pm2 start server/app.js --name "wallet-api"
 
-- [Hardhat Documentation](https://hardhat.org/docs)
-- [Ethers.js v6 Documentation](https://docs.ethers.org/v6/)
-- [MongoDB + Mongoose Guide](https://mongoosejs.com/docs/guide.html)
-- [Express.js Documentation](https://expressjs.com/)
-- [EIP-712 Specification](https://eips.ethereum.org/EIPS/eip-712)
+# Or with Docker
+docker build -t wallet-api .
+docker run -p 4000:4000 --env-file .env wallet-api
+```
+
+### Infrastructure Recommendations
+- **Reverse Proxy**: Nginx với SSL
+- **Database**: MongoDB Atlas (managed)
+- **Monitoring**: PM2 + DataDog/NewRelic
+- **Backup**: Automated DB backups
+- **CDN**: CloudFlare cho static assets
 
 ---
 
-**Happy Coding! 🚀**
+## 📈 Performance & Monitoring
+
+### Metrics to Track
+- **Transaction Success Rate**
+- **Order Fill Rate** 
+- **API Response Times**
+- **Gas Usage** per transaction
+- **IPFS Upload Success Rate**
+
+### Health Checks
+```bash
+# API health
+curl http://localhost:4000/health
+
+# Database health
+curl http://localhost:4000/health/db
+
+# Blockchain health  
+curl http://localhost:4000/health/blockchain
+```
+
+---
+
+## 🤝 Contributing
+
+### Development Guidelines
+1. **Branch naming**: `feature/<scope>`, `fix/<scope>`, `docs/<scope>`
+2. **Commit messages**: Conventional commits format
+3. **PR size**: <300 LOC với tests và documentation
+4. **Code review**: Required trước khi merge
+
+### Pull Request Checklist
+- [ ] Tests pass (`npm test` + `npx hardhat test`)
+- [ ] Linter clean (`npm run lint`)
+- [ ] Documentation updated
+- [ ] Environment variables documented
+- [ ] Breaking changes noted
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](./LICENSE) file for details.
+
+---
+
+## 🆘 Support
+
+### Documentation
+- **Smart Contracts**: [contracts/README.md](./contracts/README.md)
+- **Deployment Scripts**: [scripts/README.md](./scripts/README.md)
+- **API Reference**: `http://localhost:4000/api-docs` (Swagger)
+
+### Community
+- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions)
+
+---
+
+## 🎯 Roadmap
+
+### ✅ Completed
+- [x] Registry system với dynamic contract discovery
+- [x] Limit Orders với EIP-712 signatures
+- [x] Multi-DEX swap system
+- [x] Epoch-based staking rewards
+- [x] IPFS receipt storage
+- [x] REST API với authentication
+- [x] Multichain support (3 testnets)
+
+### 🚧 In Progress
+- [ ] Frontend DApp integration
+- [ ] Advanced order types (stop-loss, take-profit)
+- [ ] Liquidity mining programs
+- [ ] Cross-chain bridge integration
+
+### 🔮 Future
+- [ ] Mainnet deployment
+- [ ] Mobile app support
+- [ ] Advanced analytics dashboard
+- [ ] DAO governance integration
+
+---
+
+**Built with ❤️ for the DeFi ecosystem**
+
+*Happy Trading! 🚀*

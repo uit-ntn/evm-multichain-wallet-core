@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const helmet = require("helmet");
 const compression = require("compression");
 
@@ -34,30 +33,22 @@ app.use(httpLogger);
 app.use(errorLogger);
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
-// CORS configuration - handle multiple origins and remove duplicates
-const corsOrigins = appConfig.corsOrigin
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter((origin) => origin.length > 0);
+// CORS configuration - Completely disabled for P2P development
+logger.info("🌐 CORS Configuration: Completely disabled for P2P model");
 
-// Remove duplicates
-const uniqueOrigins = [...new Set(corsOrigins)];
-
-// Log CORS configuration for debugging
-logger.info("🌐 CORS Configuration", {
-  rawOrigin: appConfig.corsOrigin,
-  parsedOrigins: uniqueOrigins,
-  originCount: uniqueOrigins.length,
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
 });
-
-const corsOptions = {
-  origin: uniqueOrigins.length === 1 ? uniqueOrigins[0] : uniqueOrigins,
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-};
-
-app.use(cors(corsOptions));
 app.use(compression());
 app.use(defaultRateLimit);
 app.use(express.json({ limit: "10mb" }));

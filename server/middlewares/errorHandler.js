@@ -48,14 +48,7 @@ function errorHandler(err, req, res, next) {
     error = { message, status: 400 };
   }
 
-  // JWT errors
-  if (err.name === "JsonWebTokenError") {
-    error = { message: "Invalid token", status: 401 };
-  }
-
-  if (err.name === "TokenExpiredError") {
-    error = { message: "Token expired", status: 401 };
-  }
+  // JWT errors removed - no authentication in P2P model
 
   // Default 500
   const status = error.status || err.statusCode || 500;
