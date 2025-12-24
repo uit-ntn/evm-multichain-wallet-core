@@ -1,6 +1,8 @@
 // routes/order.route.js
 const express = require("express");
 const router = express.Router();
+// Import trực tiếp (vì bên controller đã export trực tiếp)
+const orderController = require('../controllers/orderController');
 
 const {
   getAllOrders,
